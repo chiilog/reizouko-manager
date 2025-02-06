@@ -1,5 +1,6 @@
 import { FoodItem } from '@/lib/types';
 import { FoodCard } from './FoodCard';
+import { Grid } from '@mui/material';
 
 interface FoodListProps {
   items: FoodItem[];
@@ -8,10 +9,12 @@ interface FoodListProps {
 
 export const FoodList = ({ items, onDelete }: FoodListProps) => {
   return (
-    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+    <Grid container spacing={2}>
       {items.map((item) => (
-        <FoodCard key={item.id} food={item} onDelete={onDelete} />
+        <Grid item xs={12} sm={6} md={4} key={item.id}>
+          <FoodCard food={item} onDelete={onDelete} />
+        </Grid>
       ))}
-    </div>
+    </Grid>
   );
 };
