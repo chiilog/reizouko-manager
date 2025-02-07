@@ -1,3 +1,7 @@
+# Reizouko Manager
+
+冷蔵庫の食材の消費期限を管理するアプリです。
+
 # Welcome to your Lovable project
 
 ## Project info
