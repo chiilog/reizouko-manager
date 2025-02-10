@@ -18,7 +18,11 @@ interface AddFoodDrawerProps {
 export const AddFoodDrawer = ({ onAdd }: AddFoodDrawerProps) => {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
-  const [expiryDate, setExpiryDate] = useState('');
+  const [expiryDate, setExpiryDate] = useState(() => {
+    const date = new Date();
+    date.setDate(date.getDate() + 5);
+    return date.toISOString().split('T')[0];
+  });
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
 
@@ -62,7 +66,21 @@ export const AddFoodDrawer = ({ onAdd }: AddFoodDrawerProps) => {
         open={open}
         onClose={() => setOpen(false)}
       >
-        <Box sx={{ p: 3, maxWidth: 600, mx: 'auto', width: '100%' }}>
+        <Box sx={{ p: 3, maxWidth: 600, mx: 'auto', width: '100%', position: 'relative' }}>
+          <Typography
+            onClick={() => setOpen(false)}
+            sx={{
+              cursor: 'pointer',
+              color: 'text.secondary',
+              marginBottom: 2,
+              fontSize: '0.875rem', // 14px相当
+              '&:hover': {
+                textDecoration: 'underline'
+              }
+            }}
+          >
+            キャンセル
+          </Typography>
           <Typography variant="h6" component="h2" gutterBottom>
             新しい食品を登録
           </Typography>
