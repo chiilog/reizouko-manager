@@ -128,7 +128,6 @@ export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
                         setCalendarOpen(false);
                       }
                     }}
-                    initialFocus
                   />
                 </PopoverContent>
               </Popover>
