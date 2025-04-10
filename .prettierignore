@@ -1,2 +1,5 @@
 public
 *.d.ts
+
+src/lib/**/*
+src/components/ui/**/*
