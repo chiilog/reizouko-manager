@@ -1,3 +1,5 @@
+# アプリについて
+
 - コンポーネントはshadcnを使用して実装すること
 - レスポンシブでどのデバイスにも適切に表示されるようにすること
 - 食材のリストはローカルストレージで管理する
@@ -17,5 +19,33 @@
         - 3日〜当日：赤
         - 当日を過ぎた：黒
     - [ ] 削除ボタン
+    - [ ]
+
+# テストについて
+
 - 実装する各機能には、可能な限りテストも含めて実装すること
+
   - 使用ライブラリ：Vitest + @testing-library/react
+  - テストは主に振る舞い（behavior）に着目し、ユーザー視点で書くこと
+
+- クエリの使用優先度（[Testing Libraryのガイドライン](https://testing-library.com/docs/queries/about/)に準拠）：
+
+  ### 誰でもアクセスできるクエリ（最優先）
+
+  1. `getByRole`
+  2. `getByLabelText`
+  3. `getByPlaceholderText`
+  4. `getByText`
+  5. `getByDisplayValue`
+
+  ### セマンティッククエリ
+
+  1. `getByAltText`
+  2. `getByTitle`
+
+  ### テスト専用クエリ（最終手段）
+
+  1. `getByTestId`
+
+- テストは可読性を意識し、3A（Arrange → Act → Assert）の流れで記述してください
+  - それぞれのフェーズが分かるよう、空行やコメントで明確に区切るとより良いです
