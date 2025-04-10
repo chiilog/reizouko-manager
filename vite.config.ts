@@ -23,4 +23,5 @@ export default defineConfig({
     ],
     passWithNoTests: true,
   },
+  base: '/reizouko-manager/',
 });
