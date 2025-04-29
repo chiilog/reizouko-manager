@@ -49,3 +49,31 @@
 
 - テストは可読性を意識し、3A（Arrange → Act → Assert）の流れで記述してください
   - それぞれのフェーズが分かるよう、空行やコメントで明確に区切るとより良いです
+
+## fireEventとuserEventの使い分け
+
+- イベント発火には基本的に`userEvent`を優先して使用する
+
+  - `userEvent`は実際のユーザー操作をより忠実に再現する（ホバー、フォーカスなどの副次的イベントも含む）
+  - より現実的なテストシナリオを構築できる
+
+- `fireEvent`を使用するケース
+
+  - 特定の単一イベントのみをテストしたい場合
+  - 特定のイベントハンドラの個別テスト
+  - パフォーマンスが重要で、多数のテストを高速に実行する必要がある場合
+  - 連続したイベントの中で特定のイベントだけを分離してテストしたい場合
+
+- `userEvent`の実装方法（v14以降）
+
+  ```javascript
+  // 推奨される実装方法
+  const user = userEvent.setup();
+  await user.click(element);
+  await user.type(inputElement, 'テスト入力');
+  ```
+
+- 注意点
+  - `userEvent`は非同期APIなので、必ず`await`を使用する
+  - `userEvent`は`@testing-library/user-event`パッケージをインストールする必要がある
+  - 複雑なテストケースでは、`userEvent`のほうがバグを見つける可能性が高い
