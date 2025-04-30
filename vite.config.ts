@@ -21,6 +21,10 @@ export default defineConfig({
       '**/lib/**',
       '**/components/ui/**',
     ],
+    coverage: {
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['**/lib/**', '**/components/ui/**'],
+    },
     passWithNoTests: true,
   },
   base: '/reizouko-manager/',
