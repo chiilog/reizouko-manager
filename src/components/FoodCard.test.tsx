@@ -36,23 +36,29 @@ describe('FoodCard', () => {
     render(<FoodCard food={mockFood} onDelete={onDelete} />);
 
     // Assert
-    // 食材名が表示されていることを確認
-    expect(screen.getByText('テスト食材')).toBeInTheDocument();
+    // 食材名が表示されていることを確認（CardTitleはh2として表示される）
+    expect(
+      screen.getByRole('heading', { name: 'テスト食材' })
+    ).toBeInTheDocument();
 
-    // 賞味期限の情報が表示されていることを確認
+    // 賞味期限のラベルが表示されていることを確認
     expect(screen.getByText('賞味期限：')).toBeInTheDocument();
 
-    // 期限情報が表示されていることを確認
+    // 期限情報のラベルが表示されていることを確認
     expect(screen.getByText('期限：')).toBeInTheDocument();
 
     // 削除ボタンが表示されていることを確認
-    expect(screen.getByRole('button', { name: '削除' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'テスト食材の削除ボタン' })
+    ).toBeInTheDocument();
   });
 
   it('削除ボタンをクリックしたとき正しく処理されることを確認', () => {
     // Arrange
     render(<FoodCard food={mockFood} onDelete={onDelete} />);
-    const deleteButton = screen.getByRole('button', { name: '削除' });
+    const deleteButton = screen.getByRole('button', {
+      name: 'テスト食材の削除ボタン',
+    });
 
     // Act
     // 削除ボタンをクリック
@@ -73,7 +79,9 @@ describe('FoodCard', () => {
     // Arrange
     window.confirm = vi.fn(() => false); // キャンセルするケース
     render(<FoodCard food={mockFood} onDelete={onDelete} />);
-    const deleteButton = screen.getByRole('button', { name: '削除' });
+    const deleteButton = screen.getByRole('button', {
+      name: 'テスト食材の削除ボタン',
+    });
 
     // Act
     // 削除ボタンをクリック

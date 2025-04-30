@@ -2,6 +2,13 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+type CardTitleElement = 'div' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
+
+interface CardTitleProps extends Omit<React.HTMLAttributes<HTMLElement>, 'as'> {
+  as?: CardTitleElement;
+  className?: string;
+}
+
 function Card({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -28,9 +35,9 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
+function CardTitle({ as: Component = 'div', className, ...props }: CardTitleProps) {
   return (
-    <div
+    <Component
       data-slot="card-title"
       className={cn("leading-none font-semibold", className)}
       {...props}
