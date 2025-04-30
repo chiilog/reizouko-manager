@@ -2,7 +2,8 @@
  * FoodCardコンポーネントのテスト
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { FoodCard } from './FoodCard';
 import { formatDateToISOString } from '@/lib/date-utils';
 import * as storageUtils from '@/lib/storage';
@@ -30,6 +31,7 @@ describe('FoodCard', () => {
   };
 
   const onDelete = vi.fn();
+  const user = userEvent.setup();
 
   it('食材の情報が正しく表示されることを確認', () => {
     // Arrange
@@ -53,7 +55,7 @@ describe('FoodCard', () => {
     ).toBeInTheDocument();
   });
 
-  it('削除ボタンをクリックしたとき正しく処理されることを確認', () => {
+  it('削除ボタンをクリックしたとき正しく処理されることを確認', async () => {
     // Arrange
     render(<FoodCard food={mockFood} onDelete={onDelete} />);
     const deleteButton = screen.getByRole('button', {
@@ -62,7 +64,7 @@ describe('FoodCard', () => {
 
     // Act
     // 削除ボタンをクリック
-    fireEvent.click(deleteButton);
+    await user.click(deleteButton);
 
     // Assert
     // 確認ダイアログが表示されたことを確認
@@ -75,7 +77,7 @@ describe('FoodCard', () => {
     expect(onDelete).toHaveBeenCalled();
   });
 
-  it('確認ダイアログでキャンセルした場合、削除処理が行われないことを確認', () => {
+  it('確認ダイアログでキャンセルした場合、削除処理が行われないことを確認', async () => {
     // Arrange
     window.confirm = vi.fn(() => false); // キャンセルするケース
     render(<FoodCard food={mockFood} onDelete={onDelete} />);
@@ -85,7 +87,7 @@ describe('FoodCard', () => {
 
     // Act
     // 削除ボタンをクリック
-    fireEvent.click(deleteButton);
+    await user.click(deleteButton);
 
     // Assert
     // 確認ダイアログが表示されたことを確認
