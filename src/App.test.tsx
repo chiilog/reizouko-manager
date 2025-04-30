@@ -129,8 +129,10 @@ describe('App コンポーネント', () => {
     // Arrange
     // addFoodItemのモック
     const mockAddFoodItem = vi.mocked(storage.addFoodItem);
-    mockAddFoodItem.mockImplementation(() => {
-      return { id: '3', name: '新しい食材', expiryDate: '2025-01-01' };
+    mockAddFoodItem.mockReturnValue({
+      id: '3',
+      name: '新しい食材',
+      expiryDate: '2025-01-01',
     });
 
     // 最初は空の配列を返し、onFoodAddedシミュレーション後には新しい食材を含む配列を返す
@@ -140,11 +142,10 @@ describe('App コンポーネント', () => {
       expiryDate: '2025-01-01',
     };
 
-    let isFormSubmitted = false;
-    mockedGetAllFoodItems.mockImplementation(() => {
-      // フォーム送信後は新しい食材を含む配列を返す
-      return isFormSubmitted ? [newItem] : [];
-    });
+    // フォーム送信前は空配列、送信後は新しい食材を含む配列を返す
+    mockedGetAllFoodItems
+      .mockReturnValueOnce([]) // 初期表示時（空）
+      .mockReturnValueOnce([newItem]); // フォーム送信後（新アイテムあり）
 
     // 画面をレンダリング
     render(<App />);
@@ -168,9 +169,6 @@ describe('App コンポーネント', () => {
 
     // 食品名を入力
     await user.type(nameInput, '新しい食材');
-
-    // フォーム送信後に食材リストが更新されることをシミュレート
-    isFormSubmitted = true;
 
     // 送信ボタンをクリック
     await user.click(submitButton);
@@ -199,16 +197,16 @@ describe('App コンポーネント', () => {
     // Arrange
     // 削除関数の直接モック
     const mockDeleteFoodItem = vi.mocked(storage.deleteFoodItem);
-    mockDeleteFoodItem.mockImplementation(() => {});
 
     // confirmモック
     window.confirm = vi.fn(() => true);
 
-    // 初回レンダリング時は両方、削除後は牛乳のみ
-    let items = [...initialFoodItems];
-    mockedGetAllFoodItems.mockImplementation(() => {
-      return items;
-    });
+    // 初期状態では両方の食材を表示
+    mockedGetAllFoodItems.mockReturnValueOnce([...initialFoodItems]);
+
+    // 削除後は牛乳のみを表示（りんごが削除される）
+    const afterDeleteItems = initialFoodItems.filter((item) => item.id !== '1');
+    mockedGetAllFoodItems.mockReturnValueOnce(afterDeleteItems);
 
     render(<App />);
 
@@ -233,14 +231,8 @@ describe('App コンポーネント', () => {
     });
     expect(buttonForApple).toBeInTheDocument();
 
-    // 削除前の状態でonDeleteをシミュレートする準備
-    // 削除ボタンをクリックすると、内部的にdeleteFoodItemが呼ばれ、その後onDeleteが呼ばれる
-    // onDeleteはAppコンポーネントから渡されたloadFoodItems関数
-    // これが呼ばれると、itemsが更新される
-    mockDeleteFoodItem.mockImplementation((id) => {
-      // 削除処理をシミュレート
-      items = items.filter((item) => item.id !== id);
-    });
+    // deleteFoodItemが呼ばれたときに、指定されたIDの食材を削除する
+    mockDeleteFoodItem.mockReturnValue(undefined); // 実際の関数は戻り値がないので、undefinedを返す
 
     // 削除ボタンをクリック
     await user.click(buttonForApple);
