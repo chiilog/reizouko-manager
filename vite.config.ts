@@ -23,7 +23,7 @@ export default defineConfig({
     ],
     coverage: {
       include: ['src/**/*.{ts,tsx}'],
-      exclude: ['**/lib/**', '**/components/ui/**'],
+      exclude: ['**/lib/**', '**/components/ui/**', '**/*.d.ts'],
     },
     passWithNoTests: true,
   },

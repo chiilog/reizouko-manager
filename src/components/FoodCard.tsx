@@ -57,9 +57,13 @@ export function FoodCard({ food, onDelete }: FoodCardProps) {
   const colorClass = getExpiryColorClass(daysRemaining);
 
   return (
-    <Card className={`w-full transition-all ${colorClass}`}>
+    <Card
+      className={`w-full transition-all ${colorClass}`}
+      role="article"
+      aria-label={`${food.name}の食材カード`}
+    >
       <CardHeader>
-        <CardTitle>{food.name}</CardTitle>
+        <CardTitle as="h2">{food.name}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex flex-col gap-1">
@@ -74,7 +78,12 @@ export function FoodCard({ food, onDelete }: FoodCardProps) {
         </div>
       </CardContent>
       <CardFooter>
-        <Button variant="destructive" size="sm" onClick={handleDelete}>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={handleDelete}
+          aria-label={`${food.name}の削除ボタン`}
+        >
           削除
         </Button>
       </CardFooter>
