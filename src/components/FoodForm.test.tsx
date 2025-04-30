@@ -2,7 +2,7 @@
  * FoodFormコンポーネントのテスト
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FoodForm } from './FoodForm';
 import * as storageUtils from '@/lib/storage';
@@ -55,7 +55,7 @@ describe('FoodForm', () => {
     expect(screen.getByRole('button', { name: '登録' })).toBeInTheDocument();
   });
 
-  it('フォーム送信時に正しい処理が行われることを確認', () => {
+  it('フォーム送信時に正しい処理が行われることを確認', async () => {
     // Arrange
     render(<FoodForm {...mockProps} />);
     const nameInput = screen.getByRole('textbox', { name: '食品名' });
@@ -63,35 +63,37 @@ describe('FoodForm', () => {
 
     // Act
     // 食品名を入力
-    fireEvent.change(nameInput, { target: { value: 'テスト食材' } });
+    await user.type(nameInput, 'テスト食材');
 
     // 登録ボタンをクリック
-    fireEvent.click(submitButton);
+    await user.click(submitButton);
 
     // Assert
     // addFoodItemが呼ばれたことを確認
     expect(storageUtils.addFoodItem).toHaveBeenCalled();
 
     // onFoodAddedとonCloseが呼ばれたことを確認
-    expect(mockProps.onFoodAdded).toHaveBeenCalled();
-    expect(mockProps.onClose).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(mockProps.onFoodAdded).toHaveBeenCalled();
+      expect(mockProps.onClose).toHaveBeenCalled();
+    });
   });
 
-  it('キャンセルボタンをクリックするとonCloseが呼ばれることを確認', () => {
+  it('キャンセルボタンをクリックするとonCloseが呼ばれることを確認', async () => {
     // Arrange
     render(<FoodForm {...mockProps} />);
     const cancelButton = screen.getByRole('button', { name: 'キャンセル' });
 
     // Act
     // キャンセルボタンをクリック
-    fireEvent.click(cancelButton);
+    await user.click(cancelButton);
 
     // Assert
     // onCloseが呼ばれたことを確認
     expect(mockProps.onClose).toHaveBeenCalled();
   });
 
-  it('食品名が空の場合、フォーム送信時にフォーカスが設定されることを確認', () => {
+  it('食品名が空の場合、フォーム送信時にフォーカスが設定されることを確認', async () => {
     // Arrange
     render(<FoodForm {...mockProps} />);
     const submitButton = screen.getByRole('button', { name: '登録' });
@@ -100,7 +102,7 @@ describe('FoodForm', () => {
 
     // Act
     // 登録ボタンをクリック
-    fireEvent.click(submitButton);
+    await user.click(submitButton);
 
     // Assert
     // storageのメソッドが呼ばれていないことを確認
