@@ -81,6 +81,104 @@
   - 特定のイベントハンドラ関数を個別にテストする場合。
   - パフォーマンスが重要で、多数のテストを高速に実行する必要がある場合。
 
+## モックの扱い方
+
+外部モジュールや関数をモック化する場合は、以下のガイドラインに従ってください。
+
+### モックのリセット
+
+- **重要:** 各テスト間でモックの状態をリセットするため、必ず `beforeEach` フックで `vi.clearAllMocks()` を呼び出すこと。
+
+  ```typescript
+  import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+  // モジュールのモック
+  vi.mock('./path/to/module');
+  const mockedFunction = vi.mocked(someModule.someFunction);
+
+  describe('Component tests', () => {
+    // 各テスト前にモックをリセット
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('should do something', () => {
+      // テスト内容
+      expect(mockedFunction).toHaveBeenCalledTimes(1);
+    });
+  });
+  ```
+
+- **個別のモックリセット:** 特定のモックだけをリセットしたい場合は `mockReset()` または `mockClear()` を使用する。
+  - `mockClear()`: 呼び出し回数のカウンターをリセット
+  - `mockReset()`: 呼び出し回数のカウンターをリセットし、実装もデフォルトに戻す
+
+### モック実装の設定
+
+- **戻り値の設定:** `mockReturnValue()` または `mockReturnValueOnce()` を使用して、モック関数の戻り値を設定する。
+
+  ```typescript
+  // 常に同じ値を返す
+  mockedFunction.mockReturnValue('固定の戻り値');
+
+  // 呼び出し順に異なる値を返す
+  mockedFunction
+    .mockReturnValueOnce('1回目の戻り値')
+    .mockReturnValueOnce('2回目の戻り値');
+  ```
+
+- **実装の置き換え:** `mockImplementation()` または `mockImplementationOnce()` を使用して、モック関数の実装を置き換える。
+  ```typescript
+  mockedFunction.mockImplementation((arg) => {
+    // カスタム実装
+    return `処理された値: ${arg}`;
+  });
+  ```
+
+### 非同期処理のモック
+
+- **基本:** 非同期API呼び出しなどのモックには、Promiseを返すモック関数を使用する。
+
+  ```typescript
+  // 成功するPromiseを返す
+  mockedApiCall.mockResolvedValue(responseData);
+
+  // 失敗するPromiseを返す
+  mockedApiCall.mockRejectedValue(new Error('エラーメッセージ'));
+  ```
+
+- **テスト記述:** 非同期モックを使用するテストは、`async/await`パターンを使用し、`waitFor`を用いて状態変化を待機する。
+
+  ```typescript
+  it('非同期処理のテスト', async () => {
+    // モックの設定
+    mockedApiCall.mockResolvedValue(testData);
+
+    // コンポーネントのレンダリング
+    render(<AsyncComponent />);
+
+    // 非同期処理の完了を待つ
+    await waitFor(() => {
+      expect(screen.getByText(/期待するテキスト/)).toBeInTheDocument();
+    });
+  });
+  ```
+
+- **高度なケース:** 複雑な非同期シナリオ（遅延、条件付き応答、連続した異なる応答など）が必要な場合は、個別のテスト計画で詳細を検討する。
+
+### モックの検証
+
+- **呼び出し回数の検証:** `toHaveBeenCalledTimes()` を使用して、モック関数が期待通りの回数呼び出されたことを確認する。
+
+  ```typescript
+  expect(mockedFunction).toHaveBeenCalledTimes(1);
+  ```
+
+- **引数の検証:** `toHaveBeenCalledWith()` を使用して、モック関数が期待通りの引数で呼び出されたことを確認する。
+  ```typescript
+  expect(mockedFunction).toHaveBeenCalledWith('期待する引数');
+  ```
+
 ## 除外設定
 
 `vite.config.ts` で以下のディレクトリがテスト対象から除外されています。
