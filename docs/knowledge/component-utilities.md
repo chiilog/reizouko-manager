@@ -16,11 +16,11 @@
   - `Date` オブジェクトまたはISO形式の日付文字列を受け取り、日本語の年月日形式（例: 2023年4月1日）の文字列に変換して返します。
 - `getExpiryColorClass(daysRemaining: number): string`
   - 残り日数を受け取り、その日数に応じた背景色と文字色を指定するTailwind CSSのクラス名を返します。
-    - 残り日数 < 0: `bg-black text-white`
-    - 残り日数 = 0: `bg-red-500 text-white`
-    - 残り日数 <= 3: `bg-red-200`
-    - 残り日数 <= 5: `bg-yellow-200`
-    - それ以外: `bg-green-200`
+    - 残り日数 < 0: `bg-black text-white` (黒背景、白文字 - 期限切れ)
+    - 残り日数 = 0: `bg-red-500 text-white` (赤背景、白文字 - 当日)
+    - 残り日数 <= 3: `bg-red-200` (薄い赤背景 - 期限間近)
+    - 残り日数 <= 5: `bg-yellow-200` (薄い黄色背景 - やや注意)
+    - それ以外: `bg-green-200` (薄い緑背景 - 余裕あり)
 
 ## storage.ts
 
@@ -40,7 +40,7 @@
 アプリケーション全体で使用される型定義を提供します。
 
 - `FoodItem` インターフェース
-  - 食材データを表現する型です。
+  - 食材データを表現する型です。アプリケーション全体で食材データの構造を統一するために使用されます。
     - `id: string`: 食材の一意な識別子。
     - `name: string`: 食材の名前。
     - `expiryDate: string`: 賞味期限（`YYYY-MM-DD` 形式の文字列）。
