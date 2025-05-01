@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -85,6 +86,9 @@ export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>食材の登録</DialogTitle>
+          <DialogDescription>
+            食材の名前と賞味期限を入力してください。
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
