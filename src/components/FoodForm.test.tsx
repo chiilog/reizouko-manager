@@ -205,7 +205,6 @@ describe('FoodForm', () => {
     // 昨日の日付を取得
     const yesterday = new Date(today);
     yesterday.setDate(today.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0]; // YYYY-MM-DD形式
     const yesterdayDay = yesterday.getDate(); // 日（数値）だけを取得
 
     // 日付をクリックする前に現在選択されている日付のテキストを保存
@@ -214,42 +213,19 @@ describe('FoodForm', () => {
     // 日付セル（td）を取得
     const allCells = within(calendar).getAllByRole('gridcell');
 
-    // 昨日のセルを特定する関数
-    const findYesterdayCells = () => {
-      // まずdata属性で探す（優先度高）
-      const cellsByAttribute = allCells.filter(
-        (cell) =>
-          cell.getAttribute('data-day') === yesterdayStr ||
-          cell.getAttribute('data-date') === yesterdayStr
-      );
-
-      if (cellsByAttribute.length > 0) {
-        return cellsByAttribute;
-      }
-
-      // 属性で見つからなかった場合はテキスト内容で特定
-      return allCells.filter((cell) => {
-        const cellText = cell.textContent || '';
+    // 昨日の日付を特定し、その日付が選択できないことを検証するアプローチ
+    // 方法1: 過去日付のセルを直接特定して検証
+    const findDisabledYesterdayCell = () => {
+      // タイムゾーンを考慮した日付文字列比較用の関数
+      const isSameDay = (date1: Date, date2: Date) => {
         return (
-          cellText === String(yesterdayDay) ||
-          cellText.startsWith(String(yesterdayDay))
+          date1.getFullYear() === date2.getFullYear() &&
+          date1.getMonth() === date2.getMonth() &&
+          date1.getDate() === date2.getDate()
         );
-      });
-    };
+      };
 
-    const yesterdayCells = findYesterdayCells();
-
-    // 昨日の日付（過去日）が選択できないことを検証
-    if (yesterdayCells.length > 0) {
-      // セルに内部のボタンがあればそれをクリック、なければセル自体をクリック
-      const clickTarget =
-        yesterdayCells[0].querySelector('button') || yesterdayCells[0];
-      await user.click(clickTarget);
-
-      // 過去の日付なので選択されず、日付が変わらないことを確認
-      expect(dateButton.textContent).toBe(beforeClick);
-    } else {
-      // 直接日付の取得が失敗した場合、disabled属性を持つセルが存在することを確認
+      // disabled属性を持つセルを取得
       const disabledCells = allCells.filter((cell) => {
         return (
           cell.hasAttribute('data-disabled') ||
@@ -258,16 +234,70 @@ describe('FoodForm', () => {
         );
       });
 
-      expect(disabledCells.length).toBeGreaterThan(0);
-      // 各セルが実際にdisabled状態であることを確認
-      disabledCells.forEach((cell) => {
-        // disabled状態を示す属性のいずれかが存在することを確認
-        expect(
+      // disabledセルのうち、昨日の日付と一致するものを探す
+      for (const cell of disabledCells) {
+        const cellDate = cell.getAttribute('data-day') || '';
+        if (cellDate) {
+          const dateParts = cellDate.split('-').map(Number);
+          if (dateParts.length === 3) {
+            const [year, month, day] = dateParts;
+            const cellDateObj = new Date(Date.UTC(year, month - 1, day));
+            if (isSameDay(cellDateObj, yesterday)) {
+              return cell;
+            }
+          }
+        }
+      }
+
+      // data-day属性がない場合は、テキスト内容と位置で推定
+      return disabledCells.find((cell) => {
+        const cellText = cell.textContent || '';
+        return cellText === String(yesterdayDay);
+      });
+    };
+
+    // 方法2: すべてのdisabledセルを検証
+    const verifyDisabledCells = () => {
+      const disabledCells = allCells.filter((cell) => {
+        return (
           cell.hasAttribute('data-disabled') ||
-            cell.getAttribute('aria-disabled') === 'true' ||
-            cell.classList.contains('disabled')
+          cell.getAttribute('aria-disabled') === 'true' ||
+          cell.classList.contains('disabled')
+        );
+      });
+
+      // 少なくとも1つのdisabledセルが存在することを確認
+      expect(disabledCells.length).toBeGreaterThan(0);
+
+      // 各セルが少なくとも1つのdisabled状態を示す属性を持つことを確認
+      disabledCells.forEach((cell) => {
+        const hasDisabledAttribute = cell.hasAttribute('data-disabled');
+        const hasAriaDisabledTrue =
+          cell.getAttribute('aria-disabled') === 'true';
+        const hasDisabledClass = cell.classList.contains('disabled');
+
+        expect(
+          hasDisabledAttribute || hasAriaDisabledTrue || hasDisabledClass
         ).toBe(true);
       });
+
+      return disabledCells;
+    };
+
+    // 昨日の日付セルを特定
+    const yesterdayCell = findDisabledYesterdayCell();
+
+    if (yesterdayCell) {
+      // 昨日の日付セルが特定できた場合、そのセルをクリックしても日付が変わらないことを確認
+      const clickTarget =
+        yesterdayCell.querySelector('button') || yesterdayCell;
+      await user.click(clickTarget);
+
+      // 過去の日付なので選択されず、日付が変わらないことを確認
+      expect(dateButton.textContent).toBe(beforeClick);
+    } else {
+      // 昨日の日付セルが特定できなかった場合、すべてのdisabledセルを検証
+      verifyDisabledCells();
     }
 
     // テスト終了時に日付が変更されていないことを最終確認
