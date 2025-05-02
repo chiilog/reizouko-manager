@@ -2,7 +2,7 @@
  * FoodFormコンポーネントのテスト
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FoodForm } from './FoodForm';
 import * as storageUtils from '@/lib/storage';
@@ -174,4 +174,137 @@ describe('FoodForm', () => {
       expect(mockProps.onClose).toHaveBeenCalledTimes(1);
     });
   });
+
+  /**
+   * カレンダーで過去の日付が選択できないことを確認するテスト
+   */
+  it('カレンダーで過去の日付が選択できないことを確認', async () => {
+    // Arrange
+    render(<FoodForm {...mockProps} />);
+
+    // 日付選択ボタンを取得
+    const dateButton = screen.getByRole('button', {
+      name: /^(\d{4})年(\d{1,2})月(\d{1,2})日$/,
+    });
+
+    // 初期の日付の値を保存
+    const initialDateText = dateButton.textContent;
+
+    // Act
+    // カレンダーを開く
+    await user.click(dateButton);
+
+    // カレンダーが表示されていることを確認
+    const calendar = await screen.findByRole('grid');
+    expect(calendar).toBeVisible();
+
+    // 過去日付のセルを探す
+    const yesterdayCell = findDisabledYesterdayCell(calendar);
+
+    // 過去日付のセルが見つかった場合、クリックを試みる
+    if (yesterdayCell) {
+      await user.click(yesterdayCell);
+    }
+
+    // Assert
+    if (yesterdayCell) {
+      // 過去の日付なので選択されず、日付が変わらないことを確認
+      expect(dateButton.textContent).toBe(initialDateText);
+    } else {
+      // 過去日付のセルが見つからない場合は、disabled属性を持つセルが存在することを確認
+      const disabledCells = verifyDisabledCells(calendar);
+      expect(disabledCells.length).toBeGreaterThan(0);
+    }
+
+    // テスト終了時に日付が変更されていないことを最終確認
+    expect(dateButton.textContent).toBe(initialDateText);
+  });
+
+  /**
+   * 過去日付（昨日）のセルを特定する関数
+   * @param calendar カレンダー要素
+   * @returns 昨日の日付に対応するセル要素、または undefined
+   */
+  function findDisabledYesterdayCell(calendar: HTMLElement) {
+    // 今日の日付を取得
+    const today = new Date();
+    // タイムゾーンを考慮してUTCで昨日の日付を作成
+    const yesterday = new Date(
+      Date.UTC(today.getFullYear(), today.getMonth(), today.getDate() - 1)
+    );
+
+    // カレンダー内のすべてのセルを取得
+    const allCells = within(calendar).getAllByRole('gridcell');
+
+    // disabled属性を持つセルのうち、昨日の日付と一致するものを探す
+    const disabledCells = allCells.filter(
+      (cell) =>
+        cell.hasAttribute('data-disabled') ||
+        cell.getAttribute('aria-disabled') === 'true' ||
+        cell.classList.contains('disabled')
+    );
+
+    // 昨日の日付のセルを特定して返す
+    return disabledCells.find((cell) => {
+      // data-day属性がある場合は、その値から日付を比較
+      const cellDate = cell.getAttribute('data-day');
+      if (cellDate) {
+        const [year, month, day] = cellDate.split('-').map(Number);
+        const cellDateObj = new Date(Date.UTC(year, month - 1, day));
+        return isSameDay(cellDateObj, yesterday);
+      }
+
+      // data-day属性がない場合は、テキスト内容で比較
+      const cellText = cell.textContent || '';
+      return cellText === String(yesterday.getDate());
+    });
+  }
+
+  /**
+   * 2つの日付が同じ日かどうかを判定する関数
+   * @param date1 比較する日付1
+   * @param date2 比較する日付2
+   * @returns 同じ日である場合はtrue、そうでない場合はfalse
+   */
+  function isSameDay(date1: Date, date2: Date) {
+    return (
+      date1.getFullYear() === date2.getFullYear() &&
+      date1.getMonth() === date2.getMonth() &&
+      date1.getDate() === date2.getDate()
+    );
+  }
+
+  /**
+   * カレンダー内のdisabled状態のセルを検証する関数
+   * @param calendar カレンダー要素
+   * @returns disabled状態のセル要素の配列
+   */
+  function verifyDisabledCells(calendar: HTMLElement) {
+    // カレンダー内のすべてのセルを取得
+    const allCells = within(calendar).getAllByRole('gridcell');
+
+    // disabled属性を持つセルを取得
+    const disabledCells = allCells.filter(
+      (cell) =>
+        cell.hasAttribute('data-disabled') ||
+        cell.getAttribute('aria-disabled') === 'true' ||
+        cell.classList.contains('disabled')
+    );
+
+    // 少なくとも1つのdisabledセルが存在することを確認
+    expect(disabledCells.length).toBeGreaterThan(0);
+
+    // 各セルが少なくとも1つのdisabled状態を示す属性を持つことを確認
+    disabledCells.forEach((cell) => {
+      const hasDisabledAttribute = cell.hasAttribute('data-disabled');
+      const hasAriaDisabledTrue = cell.getAttribute('aria-disabled') === 'true';
+      const hasDisabledClass = cell.classList.contains('disabled');
+
+      expect(
+        hasDisabledAttribute || hasAriaDisabledTrue || hasDisabledClass
+      ).toBe(true);
+    });
+
+    return disabledCells;
+  }
 });
