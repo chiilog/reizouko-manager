@@ -205,35 +205,28 @@ describe('FoodForm', () => {
     // 日付をクリックする前に現在選択されている日付のテキストを保存
     const beforeClick = dateButton.textContent;
 
-    // 日付セル（td）の中から日付を探す
-    // 注意: 日付の取得方法は実装によって異なるため、複数の方法を試す
+    // 日付セル（td）を取得
     const allCells = within(calendar).getAllByRole('gridcell');
 
-    // 方法1: data-day属性で日付を特定（react-day-pickerの場合）
-    const yesterdayCellsByData = allCells.filter((cell) => {
+    // 昨日のセルを特定（優先順位: data-day/data-date属性 > 日付テキスト）
+    let yesterdayCells = allCells.filter((cell) => {
       return (
         cell.getAttribute('data-day') === yesterdayStr ||
         cell.getAttribute('data-date') === yesterdayStr
       );
     });
 
-    // 方法2: 日付のテキスト内容で特定
-    const yesterdayDay = yesterday.getDate();
-    const yesterdayCellsByText = allCells.filter((cell) => {
-      const cellText = cell.textContent || '';
-      // 月をまたぐカレンダーの場合を考慮して、前月・次月の日付は薄く表示されることが多い
-      // 日付の数字が一致し、かつ前月のセルの特性（特定のクラスなど）を持つか確認
-      return (
-        cellText === String(yesterdayDay) ||
-        cellText.startsWith(String(yesterdayDay))
-      );
-    });
-
-    // 特定した昨日のセルを優先順位で選択（data属性 > テキスト検索）
-    const yesterdayCells =
-      yesterdayCellsByData.length > 0
-        ? yesterdayCellsByData
-        : yesterdayCellsByText;
+    // data属性で見つからなかった場合は、テキスト内容で特定
+    if (yesterdayCells.length === 0) {
+      const yesterdayDay = yesterday.getDate();
+      yesterdayCells = allCells.filter((cell) => {
+        const cellText = cell.textContent || '';
+        return (
+          cellText === String(yesterdayDay) ||
+          cellText.startsWith(String(yesterdayDay))
+        );
+      });
+    }
 
     // yesterdayCellが見つかった場合はクリックを試みる
     if (yesterdayCells.length > 0) {
