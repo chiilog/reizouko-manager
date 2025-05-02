@@ -176,9 +176,10 @@ export function FoodForm({
                 placeholder="例：きゅうり、たまご"
                 value={name}
                 onChange={(e) => {
-                  const newValue = e.target.value;
-                  const validationError = validateFoodName(newValue);
-                  setName(newValue);
+                  setName(e.target.value);
+                }}
+                onBlur={(e) => {
+                  const validationError = validateFoodName(e.target.value);
                   setError(validationError);
                 }}
                 maxLength={MAX_NAME_LENGTH}

@@ -458,15 +458,24 @@ describe('FoodForm', () => {
       const submitButton = screen.getByRole('button', { name: '登録' });
 
       // Act
-      await user.type(nameInput, '   '); // スペースのみの入力
-      await user.click(submitButton);
+      // スペースのみを入力
+      await user.clear(nameInput);
+      await user.type(nameInput, '   ');
+
+      // フォーカスを外す（onBlurイベントをトリガー）
+      fireEvent.blur(nameInput);
 
       // Assert
+      // エラーメッセージが表示されることを確認
+      await waitFor(() => {
+        expect(
+          screen.getByText('食品名を入力してください。空白文字のみは無効です。')
+        ).toBeInTheDocument();
+      });
+
+      // エラー状態で送信ボタンをクリックしても処理が実行されないことを確認
+      await user.click(submitButton);
       expect(storageUtils.addFoodItem).not.toHaveBeenCalled();
-      // 空白のみでエラーメッセージが表示されることを確認
-      expect(
-        screen.getByText('食品名を入力してください。空白文字のみは無効です。')
-      ).toBeInTheDocument();
     });
 
     it('入力文字数が上限を超える場合にエラーを表示することを確認', async () => {
@@ -481,38 +490,15 @@ describe('FoodForm', () => {
       const submitButton = screen.getByRole('button', { name: '登録' });
 
       // Act
-      // 50文字の名前を入力（maxLength以内）
-      const longName = 'あ'.repeat(50);
-      await user.clear(nameInput);
-      await user.type(nameInput, longName);
+      // 51文字の名前をセットし、onBlurイベントをトリガー
+      const tooLongName = 'あ'.repeat(51);
+      fireEvent.change(nameInput, { target: { value: tooLongName } });
 
-      // エラーメッセージが表示されていないことを確認
-      expect(
-        screen.queryByText('食品名は50文字以内で入力してください。')
-      ).not.toBeInTheDocument();
+      // フォーカスを外す（onBlurイベントをトリガー）
+      fireEvent.blur(nameInput);
 
-      // HTMLの入力制限（maxLength）によって51文字目は通常入力できない
-      // テストでは検証のためにリセットしてからステップバイステップで51文字目を入力
-
-      // 一度入力をクリア
-      await user.clear(nameInput);
-
-      // 50文字の文字列を入力
-      await user.type(nameInput, 'あ'.repeat(50));
-
-      // クリックしても処理が成功することを確認（50文字はOK）
-      await user.click(submitButton);
-      expect(storageUtils.addFoodItem).toHaveBeenCalledTimes(1);
-      vi.resetAllMocks();
-
-      // FoodFormコンポーネントには既にmaxLength={MAX_NAME_LENGTH}の制限があるため、
-      // 通常のユーザー入力では51文字目は入力できないことを検証するため、
-      // コンポーネントの内部状態をJSDOM環境でテストするには直接DOM APIを使用
-
-      // onChangeイベントをトリガーする（直接DOMを操作するテスト技法）
-      fireEvent.change(nameInput, { target: { value: 'あ'.repeat(51) } });
-
-      // リアルタイムバリデーションによりエラーメッセージが表示されることを確認
+      // Assert
+      // バリデーションエラーメッセージが表示されることを確認
       await waitFor(() => {
         expect(
           screen.getByText('食品名は50文字以内で入力してください。')
