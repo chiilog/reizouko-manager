@@ -201,6 +201,7 @@ describe('FoodForm', () => {
     const yesterday = new Date(today);
     yesterday.setDate(today.getDate() - 1);
     const yesterdayStr = yesterday.toISOString().split('T')[0]; // YYYY-MM-DD形式
+    const yesterdayDay = yesterday.getDate(); // 日（数値）だけを取得
 
     // 日付をクリックする前に現在選択されている日付のテキストを保存
     const beforeClick = dateButton.textContent;
@@ -208,27 +209,32 @@ describe('FoodForm', () => {
     // 日付セル（td）を取得
     const allCells = within(calendar).getAllByRole('gridcell');
 
-    // 昨日のセルを特定（優先順位: data-day/data-date属性 > 日付テキスト）
-    let yesterdayCells = allCells.filter((cell) => {
-      return (
-        cell.getAttribute('data-day') === yesterdayStr ||
-        cell.getAttribute('data-date') === yesterdayStr
+    // 昨日のセルを特定する関数
+    const findYesterdayCells = () => {
+      // まずdata属性で探す（優先度高）
+      const cellsByAttribute = allCells.filter(
+        (cell) =>
+          cell.getAttribute('data-day') === yesterdayStr ||
+          cell.getAttribute('data-date') === yesterdayStr
       );
-    });
 
-    // data属性で見つからなかった場合は、テキスト内容で特定
-    if (yesterdayCells.length === 0) {
-      const yesterdayDay = yesterday.getDate();
-      yesterdayCells = allCells.filter((cell) => {
+      if (cellsByAttribute.length > 0) {
+        return cellsByAttribute;
+      }
+
+      // 属性で見つからなかった場合はテキスト内容で特定
+      return allCells.filter((cell) => {
         const cellText = cell.textContent || '';
         return (
           cellText === String(yesterdayDay) ||
           cellText.startsWith(String(yesterdayDay))
         );
       });
-    }
+    };
 
-    // yesterdayCellが見つかった場合はクリックを試みる
+    const yesterdayCells = findYesterdayCells();
+
+    // 昨日の日付（過去日）が選択できないことを検証
     if (yesterdayCells.length > 0) {
       // セルに内部のボタンがあればそれをクリック、なければセル自体をクリック
       const clickTarget =
