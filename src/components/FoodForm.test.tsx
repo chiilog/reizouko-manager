@@ -2,7 +2,13 @@
  * FoodFormコンポーネントのテスト
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import {
+  render,
+  screen,
+  waitFor,
+  within,
+  fireEvent,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FoodForm } from './FoodForm';
 import * as storageUtils from '@/lib/storage';
@@ -465,22 +471,57 @@ describe('FoodForm', () => {
 
     it('入力文字数が上限を超える場合にエラーを表示することを確認', async () => {
       // Arrange
+      // モック実装でバリデーションが失敗するように設定
+      vi.mocked(storageUtils.addFoodItem).mockImplementation(() => {
+        throw new Error('バリデーションに失敗しました');
+      });
+
       render(<FoodForm {...mockProps} />);
       const nameInput = screen.getByRole('textbox', { name: '食品名' });
       const submitButton = screen.getByRole('button', { name: '登録' });
 
       // Act
-      // 51文字の長い名前を入力
-      const longName = 'あ'.repeat(51);
+      // 50文字の名前を入力（maxLength以内）
+      const longName = 'あ'.repeat(50);
+      await user.clear(nameInput);
       await user.type(nameInput, longName);
-      await user.click(submitButton);
 
-      // Assert
-      expect(storageUtils.addFoodItem).not.toHaveBeenCalled();
-      // 文字数制限のエラーメッセージが表示されることを確認
+      // エラーメッセージが表示されていないことを確認
       expect(
-        screen.getByText('食品名は50文字以内で入力してください。')
-      ).toBeInTheDocument();
+        screen.queryByText('食品名は50文字以内で入力してください。')
+      ).not.toBeInTheDocument();
+
+      // HTMLの入力制限（maxLength）によって51文字目は通常入力できない
+      // テストでは検証のためにリセットしてからステップバイステップで51文字目を入力
+
+      // 一度入力をクリア
+      await user.clear(nameInput);
+
+      // 50文字の文字列を入力
+      await user.type(nameInput, 'あ'.repeat(50));
+
+      // クリックしても処理が成功することを確認（50文字はOK）
+      await user.click(submitButton);
+      expect(storageUtils.addFoodItem).toHaveBeenCalledTimes(1);
+      vi.resetAllMocks();
+
+      // FoodFormコンポーネントには既にmaxLength={MAX_NAME_LENGTH}の制限があるため、
+      // 通常のユーザー入力では51文字目は入力できないことを検証するため、
+      // コンポーネントの内部状態をJSDOM環境でテストするには直接DOM APIを使用
+
+      // onChangeイベントをトリガーする（直接DOMを操作するテスト技法）
+      fireEvent.change(nameInput, { target: { value: 'あ'.repeat(51) } });
+
+      // リアルタイムバリデーションによりエラーメッセージが表示されることを確認
+      await waitFor(() => {
+        expect(
+          screen.getByText('食品名は50文字以内で入力してください。')
+        ).toBeInTheDocument();
+      });
+
+      // エラー状態でクリックしても処理が実行されないことを確認
+      await user.click(submitButton);
+      expect(storageUtils.addFoodItem).not.toHaveBeenCalled();
     });
 
     it('HTMLタグを含む入力が適切にサニタイズされることを確認', async () => {

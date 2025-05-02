@@ -175,8 +175,15 @@ export function FoodForm({
                 ref={nameInputRef}
                 placeholder="例：きゅうり、たまご"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={MAX_NAME_LENGTH + 1} // 入力制限用（バリデーションメッセージを表示するため+1）
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  setName(newValue);
+
+                  // リアルタイムでバリデーションを行う
+                  const validationError = validateFoodName(newValue);
+                  setError(validationError);
+                }}
+                maxLength={MAX_NAME_LENGTH}
                 required
                 aria-describedby={error ? 'name-error' : undefined}
               />
