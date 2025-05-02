@@ -27,6 +27,45 @@ import {
 import { addFoodItem } from '@/lib/storage';
 import { Loader2 } from 'lucide-react';
 
+/**
+ * 食品名の最大文字数
+ */
+const MAX_NAME_LENGTH = 50;
+
+/**
+ * HTMLタグを削除する関数
+ * @param input 入力文字列
+ * @returns サニタイズされた文字列
+ */
+const sanitizeHtmlTags = (input: string): string => {
+  // <script> タグやその他のHTMLタグを削除
+  const noScriptTags = input.replace(
+    /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+    ''
+  );
+  // 残りの一般的なHTMLタグを削除
+  return noScriptTags.replace(/<\/?[^>]+(>|$)/g, '');
+};
+
+/**
+ * 食品名のバリデーションを行う関数
+ * @param name 食品名
+ * @returns エラーメッセージ（エラーがない場合はnull）
+ */
+const validateFoodName = (name: string): string | null => {
+  const trimmedName = name.trim();
+
+  if (!trimmedName) {
+    return '食品名を入力してください。空白文字のみは無効です。';
+  }
+
+  if (trimmedName.length > MAX_NAME_LENGTH) {
+    return `食品名は${MAX_NAME_LENGTH}文字以内で入力してください。`;
+  }
+
+  return null;
+};
+
 interface FoodFormProps {
   /**
    * ダイアログが開いているかどうか
@@ -107,7 +146,10 @@ export function FoodForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!name) {
+    // 名前を検証
+    const validationError = validateFoodName(name);
+    if (validationError) {
+      setError(validationError);
       nameInputRef.current?.focus();
       return;
     }
@@ -121,10 +163,13 @@ export function FoodForm({
     // 送信中フラグをONに
     updateSubmittingState(true);
 
+    // 名前の前後の空白をトリムし、HTMLタグをサニタイズ
+    const sanitizedName = sanitizeHtmlTags(name.trim());
+
     try {
       // 食材の追加
       addFoodItem({
-        name,
+        name: sanitizedName,
         expiryDate: formatDateToISOString(date),
       });
 
@@ -165,7 +210,9 @@ export function FoodForm({
                 placeholder="例：きゅうり、たまご"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                maxLength={MAX_NAME_LENGTH + 1} // 入力制限用（バリデーションメッセージを表示するため+1）
                 required
+                aria-describedby={error ? 'name-error' : undefined}
               />
             </div>
 
@@ -202,7 +249,11 @@ export function FoodForm({
 
             {/* エラーメッセージ表示エリア */}
             {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              <div
+                id="name-error"
+                aria-live="assertive"
+                className="rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+              >
                 {error}
               </div>
             )}

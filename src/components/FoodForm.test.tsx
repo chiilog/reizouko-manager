@@ -440,4 +440,95 @@ describe('FoodForm', () => {
     // 送信状態がリセットされ、ボタンが再度有効になることを確認
     expect(screen.getByRole('button', { name: '登録' })).toBeEnabled();
   });
+
+  /**
+   * 食品名のバリデーション強化に関するテスト
+   */
+  describe('食品名入力のバリデーション', () => {
+    it('空白文字のみの入力が無効であることを確認', async () => {
+      // Arrange
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const submitButton = screen.getByRole('button', { name: '登録' });
+
+      // Act
+      await user.type(nameInput, '   '); // スペースのみの入力
+      await user.click(submitButton);
+
+      // Assert
+      expect(storageUtils.addFoodItem).not.toHaveBeenCalled();
+      // 空白のみでエラーメッセージが表示されることを確認
+      expect(
+        screen.getByText('食品名を入力してください。空白文字のみは無効です。')
+      ).toBeInTheDocument();
+    });
+
+    it('入力文字数が上限を超える場合にエラーを表示することを確認', async () => {
+      // Arrange
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const submitButton = screen.getByRole('button', { name: '登録' });
+
+      // Act
+      // 51文字の長い名前を入力
+      const longName = 'あ'.repeat(51);
+      await user.type(nameInput, longName);
+      await user.click(submitButton);
+
+      // Assert
+      expect(storageUtils.addFoodItem).not.toHaveBeenCalled();
+      // 文字数制限のエラーメッセージが表示されることを確認
+      expect(
+        screen.getByText('食品名は50文字以内で入力してください。')
+      ).toBeInTheDocument();
+    });
+
+    it('HTMLタグを含む入力が適切にサニタイズされることを確認', async () => {
+      // Arrange
+      // モック実装を上書き
+      vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
+        return { ...food, id: 'test-id' };
+      });
+
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const submitButton = screen.getByRole('button', { name: '登録' });
+
+      // Act
+      // HTMLタグとスクリプトタグを含む名前を入力
+      await user.clear(nameInput);
+      await user.type(
+        nameInput,
+        '<div>タグ付き</div><script>alert("XSS")</script>きゅうり'
+      );
+      await user.click(submitButton);
+
+      // Assert
+      // HTMLタグとスクリプトタグが除去された状態でaddFoodItemが呼ばれることを確認
+      expect(storageUtils.addFoodItem).toHaveBeenCalledWith({
+        name: 'タグ付ききゅうり',
+        expiryDate: expect.any(String),
+      });
+    });
+
+    it('入力値がトリムされることを確認', async () => {
+      // Arrange
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const submitButton = screen.getByRole('button', { name: '登録' });
+
+      // Act
+      await user.type(nameInput, '  きゅうり  '); // 前後に空白がある
+      await user.click(submitButton);
+
+      // Assert
+      // トリムされた値でaddFoodItemが呼ばれることを確認
+      expect(storageUtils.addFoodItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'きゅうり', // 前後の空白が除去されることを期待
+          expiryDate: expect.any(String),
+        })
+      );
+    });
+  });
 });
