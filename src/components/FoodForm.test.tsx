@@ -2,7 +2,7 @@
  * FoodFormコンポーネントのテスト
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FoodForm } from './FoodForm';
 import * as storageUtils from '@/lib/storage';
@@ -173,5 +173,92 @@ describe('FoodForm', () => {
       // フォームが閉じられたことをAppに通知
       expect(mockProps.onClose).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('カレンダーで過去の日付が選択できないことを確認', async () => {
+    // Arrange
+    render(<FoodForm {...mockProps} />);
+    const dateButton = screen.getByRole('button', {
+      name: /^(\d{4})年(\d{1,2})月(\d{1,2})日$/,
+    });
+
+    // 初期の日付の値を保存
+    const initialDateText = dateButton.textContent;
+
+    // Act
+    // カレンダーを開く
+    await user.click(dateButton);
+
+    // 日付のテーブルを取得
+    const calendar = await screen.findByRole('grid');
+    expect(calendar).toBeVisible();
+
+    // 今日の日付を取得
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // 時刻をリセット
+
+    // 昨日の日付を取得
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0]; // YYYY-MM-DD形式
+
+    // 日付をクリックする前に現在選択されている日付のテキストを保存
+    const beforeClick = dateButton.textContent;
+
+    // 日付セル（td）の中から日付を探す
+    // 注意: 日付の取得方法は実装によって異なるため、複数の方法を試す
+    const allCells = within(calendar).getAllByRole('gridcell');
+
+    // 方法1: data-day属性で日付を特定（react-day-pickerの場合）
+    const yesterdayCellsByData = allCells.filter((cell) => {
+      return (
+        cell.getAttribute('data-day') === yesterdayStr ||
+        cell.getAttribute('data-date') === yesterdayStr
+      );
+    });
+
+    // 方法2: 日付のテキスト内容で特定
+    const yesterdayDay = yesterday.getDate();
+    const yesterdayCellsByText = allCells.filter((cell) => {
+      const cellText = cell.textContent || '';
+      // 月をまたぐカレンダーの場合を考慮して、前月・次月の日付は薄く表示されることが多い
+      // 日付の数字が一致し、かつ前月のセルの特性（特定のクラスなど）を持つか確認
+      return (
+        cellText === String(yesterdayDay) ||
+        cellText.startsWith(String(yesterdayDay))
+      );
+    });
+
+    // 特定した昨日のセルを優先順位で選択（data属性 > テキスト検索）
+    const yesterdayCells =
+      yesterdayCellsByData.length > 0
+        ? yesterdayCellsByData
+        : yesterdayCellsByText;
+
+    // yesterdayCellが見つかった場合はクリックを試みる
+    if (yesterdayCells.length > 0) {
+      // セルに内部のボタンがあればそれをクリック、なければセル自体をクリック
+      const clickTarget =
+        yesterdayCells[0].querySelector('button') || yesterdayCells[0];
+      await user.click(clickTarget);
+
+      // 過去の日付なので選択されず、日付が変わらないことを確認
+      expect(dateButton.textContent).toBe(beforeClick);
+    } else {
+      // 直接日付の取得が失敗した場合、disabled属性を持つセルが存在することを確認
+      const disabledCells = allCells.filter((cell) => {
+        return (
+          cell.hasAttribute('data-disabled') ||
+          cell.getAttribute('aria-disabled') === 'true' ||
+          cell.classList.contains('disabled')
+        );
+      });
+
+      expect(disabledCells.length).toBeGreaterThan(0);
+    }
+
+    // テスト終了時に日付が変更されていないことを最終確認
+    // 日付が変更されていなければ、過去の日付は選択できなかったと判断できる
+    expect(dateButton.textContent).toBe(initialDateText);
   });
 });

@@ -132,6 +132,7 @@ export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
                         setCalendarOpen(false);
                       }
                     }}
+                    disabled={{ before: new Date() }}
                   />
                 </PopoverContent>
               </Popover>
