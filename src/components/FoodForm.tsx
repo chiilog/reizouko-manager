@@ -50,6 +50,7 @@ export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
   const [name, setName] = useState('');
   const [date, setDate] = useState<Date>(getDateAfterDays(5));
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   /**
@@ -71,14 +72,30 @@ export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
       return;
     }
 
-    addFoodItem({
-      name,
-      expiryDate: formatDateToISOString(date),
-    });
+    // 既に送信中の場合は処理を中断
+    if (isSubmitting) return;
 
-    onFoodAdded();
-    resetForm();
-    onClose();
+    // 送信中フラグをONに
+    setIsSubmitting(true);
+
+    try {
+      // 食材の追加
+      addFoodItem({
+        name,
+        expiryDate: formatDateToISOString(date),
+      });
+
+      // 親コンポーネントに通知
+      onFoodAdded();
+      resetForm();
+      onClose();
+    } catch (error) {
+      // エラーが発生した場合もフラグをOFFに
+      console.error('食材の追加に失敗しました', error);
+    } finally {
+      // 処理完了時に送信中フラグをOFFに
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -143,7 +160,9 @@ export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
             <Button type="button" variant="outline" onClick={onClose}>
               キャンセル
             </Button>
-            <Button type="submit">登録</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? '登録中...' : '登録'}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

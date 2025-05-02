@@ -146,7 +146,7 @@ describe('FoodForm', () => {
   });
 
   /**
-   * 送信処理の結果がAppコンポーネントに伝わることを確認するテスト
+   * 食材追加成功時にonFoodAddedとonCloseが呼ばれることを確認
    */
   it('食材追加成功時にonFoodAddedとonCloseが呼ばれることを確認', async () => {
     // Arrange
@@ -173,6 +173,54 @@ describe('FoodForm', () => {
       // フォームが閉じられたことをAppに通知
       expect(mockProps.onClose).toHaveBeenCalledTimes(1);
     });
+  });
+
+  /**
+   * 登録ボタンのダブルクリックを防止するテスト
+   */
+  it('登録ボタンをダブルクリックしても処理が1回だけ実行されることを確認', async () => {
+    // Arrange
+    // addFoodItemの処理を遅延させるためのモック
+    let isSubmitting = false;
+    vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
+      // 既に送信中なら2回目以降の呼び出しとみなす
+      if (isSubmitting) {
+        throw new Error('二重送信が発生しました');
+      }
+
+      // 送信中フラグをON
+      isSubmitting = true;
+
+      // 結果を返す
+      const result = { ...food, id: 'test-id' };
+
+      // 非同期処理の完了後にフラグをOFF（必要に応じて）
+      setTimeout(() => {
+        isSubmitting = false;
+      }, 100);
+
+      return result;
+    });
+
+    render(<FoodForm {...mockProps} />);
+
+    const nameInput = screen.getByRole('textbox', { name: '食品名' });
+    const submitButton = screen.getByRole('button', { name: '登録' });
+
+    // Act
+    // 食品名を入力
+    await user.type(nameInput, 'テスト食材');
+
+    // 登録ボタンを素早く2回クリック
+    await user.click(submitButton);
+    await user.click(submitButton);
+
+    // Assert
+    // addFoodItemが1回だけ呼ばれたことを確認
+    expect(storageUtils.addFoodItem).toHaveBeenCalledTimes(1);
+    // コールバック関数も1回だけ呼ばれたことを確認
+    expect(mockProps.onFoodAdded).toHaveBeenCalledTimes(1);
+    expect(mockProps.onClose).toHaveBeenCalledTimes(1);
   });
 
   /**
