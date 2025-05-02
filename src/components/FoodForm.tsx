@@ -25,6 +25,7 @@ import {
   getDateAfterDays,
 } from '@/lib/date-utils';
 import { addFoodItem } from '@/lib/storage';
+import { Loader2 } from 'lucide-react';
 
 interface FoodFormProps {
   /**
@@ -51,6 +52,7 @@ export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
   const [date, setDate] = useState<Date>(getDateAfterDays(5));
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   /**
@@ -59,6 +61,7 @@ export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
   const resetForm = () => {
     setName('');
     setDate(getDateAfterDays(5));
+    setError(null);
   };
 
   /**
@@ -71,6 +74,9 @@ export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
       nameInputRef.current?.focus();
       return;
     }
+
+    // エラーをリセット
+    setError(null);
 
     // 既に送信中の場合は処理を中断
     if (isSubmitting) return;
@@ -90,8 +96,9 @@ export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
       resetForm();
       onClose();
     } catch (error) {
-      // エラーが発生した場合もフラグをOFFに
+      // エラーが発生した場合、エラーメッセージを設定
       console.error('食材の追加に失敗しました', error);
+      setError('食材の追加に失敗しました。もう一度お試しください。');
     } finally {
       // 処理完了時に送信中フラグをOFFに
       setIsSubmitting(false);
@@ -154,6 +161,13 @@ export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
                 </PopoverContent>
               </Popover>
             </div>
+
+            {/* エラーメッセージ表示エリア */}
+            {error && (
+              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                {error}
+              </div>
+            )}
           </div>
 
           <DialogFooter>
@@ -161,7 +175,14 @@ export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
               キャンセル
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? '登録中...' : '登録'}
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  登録中...
+                </>
+              ) : (
+                '登録'
+              )}
             </Button>
           </DialogFooter>
         </form>
