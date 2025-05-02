@@ -335,22 +335,22 @@ describe('FoodForm', () => {
   });
 
   it('送信処理中は二重送信が防止されることを確認', async () => {
-    // 非同期処理をシミュレートするため完了を遅らせる
-    let resolveAddFood: (value: unknown) => void = () => {};
-    const addFoodPromise = new Promise((resolve) => {
-      resolveAddFood = resolve;
-    });
+    // 非同期操作の完了を制御するためのダミー関数
+    const originalAddFoodItem = storageUtils.addFoodItem;
 
-    // クリック回数をカウント
+    // 呼び出し回数をカウント
     let submitCount = 0;
 
-    // 時間のかかる処理をモック
+    // 処理遅延をシミュレートする関数を作成
     vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
       submitCount++;
-      // 非同期処理の完了を待つ
-      // Promiseを直接返すと型エラーになるため、同期的に値を返す
-      addFoodPromise.then(() => {}).catch(() => {});
-      return { ...food, id: 'test-id' };
+
+      // 実際の処理結果をreturnする
+      return (
+        setTimeout(() => {
+          // 実際には何もしない
+        }, 100) && { ...food, id: 'test-id' }
+      );
     });
 
     // Render
@@ -361,15 +361,15 @@ describe('FoodForm', () => {
     // 食品名を入力
     await user.type(nameInput, 'テスト食材');
 
-    // 登録ボタンを連続でクリック
+    // 登録ボタンを連続で2回クリック
     await user.click(submitButton);
     await user.click(submitButton);
 
-    // 非同期処理を完了させる前にアサーション
+    // submitCountが1回のままであることを確認（多重送信防止が機能している）
     expect(submitCount).toBe(1);
 
-    // 処理を完了させる
-    resolveAddFood(undefined);
+    // テスト終了時にモックをリセット
+    vi.mocked(storageUtils.addFoodItem).mockImplementation(originalAddFoodItem);
   });
 
   it('エラー発生時も送信状態がリセットされることを確認', async () => {
@@ -394,6 +394,9 @@ describe('FoodForm', () => {
       exact: false,
     });
     expect(errorElement).toBeInTheDocument();
+
+    // エラーメッセージに具体的なエラー内容が含まれていることを確認
+    expect(errorElement.textContent).toMatch(/テストエラー/);
 
     // 送信状態がリセットされ、ボタンが再度有効になることを確認
     expect(screen.getByRole('button', { name: '登録' })).toBeEnabled();
