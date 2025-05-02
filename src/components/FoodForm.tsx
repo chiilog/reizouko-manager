@@ -26,6 +26,11 @@ import {
 } from '@/lib/date-utils';
 import { addFoodItem } from '@/lib/storage';
 import { Loader2 } from 'lucide-react';
+import {
+  MAX_NAME_LENGTH,
+  sanitizeHtmlTags,
+  validateFoodName,
+} from '@/lib/validation';
 
 interface FoodFormProps {
   /**
@@ -107,7 +112,10 @@ export function FoodForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!name) {
+    // 名前を検証
+    const validationError = validateFoodName(name);
+    if (validationError) {
+      setError(validationError);
       nameInputRef.current?.focus();
       return;
     }
@@ -121,10 +129,13 @@ export function FoodForm({
     // 送信中フラグをONに
     updateSubmittingState(true);
 
+    // 名前の前後の空白をトリムし、HTMLタグをサニタイズ
+    const sanitizedName = sanitizeHtmlTags(name.trim());
+
     try {
       // 食材の追加
       addFoodItem({
-        name,
+        name: sanitizedName,
         expiryDate: formatDateToISOString(date),
       });
 
@@ -164,8 +175,16 @@ export function FoodForm({
                 ref={nameInputRef}
                 placeholder="例：きゅうり、たまご"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value);
+                }}
+                onBlur={(e) => {
+                  const validationError = validateFoodName(e.target.value);
+                  setError(validationError);
+                }}
+                maxLength={MAX_NAME_LENGTH}
                 required
+                aria-describedby={error ? 'name-error' : undefined}
               />
             </div>
 
@@ -202,7 +221,11 @@ export function FoodForm({
 
             {/* エラーメッセージ表示エリア */}
             {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              <div
+                id="name-error"
+                aria-live="assertive"
+                className="rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+              >
                 {error}
               </div>
             )}

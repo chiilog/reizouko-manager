@@ -2,7 +2,13 @@
  * FoodFormコンポーネントのテスト
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import {
+  render,
+  screen,
+  waitFor,
+  within,
+  fireEvent,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FoodForm } from './FoodForm';
 import * as storageUtils from '@/lib/storage';
@@ -57,6 +63,11 @@ describe('FoodForm', () => {
 
   it('フォーム送信時に正しい処理が行われることを確認', async () => {
     // Arrange
+    // addFoodItemが正常に動作することをシミュレート
+    vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
+      return { ...food, id: 'test-id' };
+    });
+
     render(<FoodForm {...mockProps} />);
     const nameInput = screen.getByRole('textbox', { name: '食品名' });
     const submitButton = screen.getByRole('button', { name: '登録' });
@@ -118,6 +129,11 @@ describe('FoodForm', () => {
    */
   it('ユーザー操作を使って食材を追加できることを確認', async () => {
     // Arrange
+    // addFoodItemが正常に動作することをシミュレート
+    vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
+      return { ...food, id: 'test-id' };
+    });
+
     render(<FoodForm {...mockProps} />);
 
     // フォーム内の要素を取得
@@ -313,6 +329,11 @@ describe('FoodForm', () => {
    */
   it('登録ボタンを連続でクリックしても処理が1回だけ実行されることを確認', async () => {
     // Arrange
+    // addFoodItemが正常に動作することをシミュレート
+    vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
+      return { ...food, id: 'test-id' };
+    });
+
     render(<FoodForm {...mockProps} />);
     const nameInput = screen.getByRole('textbox', { name: '食品名' });
     const submitButton = screen.getByRole('button', { name: '登録' });
@@ -355,6 +376,11 @@ describe('FoodForm', () => {
   it('送信状態変更時にコールバックが呼び出されることを確認', async () => {
     // Arrange
     const onSubmittingChangeMock = vi.fn();
+    // addFoodItemが正常に動作することをシミュレート
+    vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
+      return { ...food, id: 'test-id' };
+    });
+
     render(
       <FoodForm {...mockProps} onSubmittingChange={onSubmittingChangeMock} />
     );
@@ -439,5 +465,122 @@ describe('FoodForm', () => {
 
     // 送信状態がリセットされ、ボタンが再度有効になることを確認
     expect(screen.getByRole('button', { name: '登録' })).toBeEnabled();
+  });
+
+  /**
+   * 食品名のバリデーション強化に関するテスト
+   */
+  describe('食品名入力のバリデーション', () => {
+    it('空白文字のみの入力が無効であることを確認', async () => {
+      // Arrange
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const submitButton = screen.getByRole('button', { name: '登録' });
+
+      // Act
+      // スペースのみを入力
+      await user.clear(nameInput);
+      await user.type(nameInput, '   ');
+
+      // フォーカスを外す（onBlurイベントをトリガー）
+      fireEvent.blur(nameInput);
+
+      // Assert
+      // エラーメッセージが表示されることを確認
+      await waitFor(() => {
+        expect(
+          screen.getByText('食品名を入力してください。空白文字のみは無効です。')
+        ).toBeInTheDocument();
+      });
+
+      // エラー状態で送信ボタンをクリックしても処理が実行されないことを確認
+      await user.click(submitButton);
+      expect(storageUtils.addFoodItem).not.toHaveBeenCalled();
+    });
+
+    it('入力文字数が上限を超える場合にエラーを表示することを確認', async () => {
+      // Arrange
+      // モック実装でバリデーションが失敗するように設定
+      vi.mocked(storageUtils.addFoodItem).mockImplementation(() => {
+        throw new Error('バリデーションに失敗しました');
+      });
+
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const submitButton = screen.getByRole('button', { name: '登録' });
+
+      // Act
+      // 51文字の名前をセットし、onBlurイベントをトリガー
+      const tooLongName = 'あ'.repeat(51);
+      fireEvent.change(nameInput, { target: { value: tooLongName } });
+
+      // フォーカスを外す（onBlurイベントをトリガー）
+      fireEvent.blur(nameInput);
+
+      // Assert
+      // バリデーションエラーメッセージが表示されることを確認
+      await waitFor(() => {
+        expect(
+          screen.getByText('食品名は50文字以内で入力してください。')
+        ).toBeInTheDocument();
+      });
+
+      // エラー状態でクリックしても処理が実行されないことを確認
+      await user.click(submitButton);
+      expect(storageUtils.addFoodItem).not.toHaveBeenCalled();
+    });
+
+    it('HTMLタグを含む入力が適切にサニタイズされることを確認', async () => {
+      // Arrange
+      // モック実装を上書き
+      vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
+        return { ...food, id: 'test-id' };
+      });
+
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const submitButton = screen.getByRole('button', { name: '登録' });
+
+      // Act
+      // HTMLタグとスクリプトタグを含む名前を入力
+      await user.clear(nameInput);
+      await user.type(
+        nameInput,
+        '<div>タグ付き</div><script>alert("XSS")</script>きゅうり'
+      );
+      await user.click(submitButton);
+
+      // Assert
+      // HTMLタグとスクリプトタグが除去された状態でaddFoodItemが呼ばれることを確認
+      expect(storageUtils.addFoodItem).toHaveBeenCalledWith({
+        name: 'タグ付ききゅうり',
+        expiryDate: expect.any(String),
+      });
+    });
+
+    it('入力値がトリムされることを確認', async () => {
+      // Arrange
+      // addFoodItemが正常に動作することをシミュレート
+      vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
+        return { ...food, id: 'test-id' };
+      });
+
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const submitButton = screen.getByRole('button', { name: '登録' });
+
+      // Act
+      await user.type(nameInput, '  きゅうり  '); // 前後に空白がある
+      await user.click(submitButton);
+
+      // Assert
+      // トリムされた値でaddFoodItemが呼ばれることを確認
+      expect(storageUtils.addFoodItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'きゅうり', // 前後の空白が除去されることを期待
+          expiryDate: expect.any(String),
+        })
+      );
+    });
   });
 });
