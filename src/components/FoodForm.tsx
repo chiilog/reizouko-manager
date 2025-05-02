@@ -98,7 +98,11 @@ export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
     } catch (error) {
       // エラーが発生した場合、エラーメッセージを設定
       console.error('食材の追加に失敗しました', error);
-      setError('食材の追加に失敗しました。もう一度お試しください。');
+      setError(
+        `食材の追加に失敗しました。もう一度お試しください。${
+          error instanceof Error ? `\n(${error.message})` : ''
+        }`
+      );
     } finally {
       // 処理完了時に送信中フラグをOFFに
       setIsSubmitting(false);

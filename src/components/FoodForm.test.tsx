@@ -347,8 +347,9 @@ describe('FoodForm', () => {
     // 時間のかかる処理をモック
     vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
       submitCount++;
-      // 非同期処理の完了を待つ（このPromiseは実際には使用されないが、処理を遅らせる目的）
-      addFoodPromise.then(() => {});
+      // 非同期処理の完了を待つ
+      // Promiseを直接返すと型エラーになるため、同期的に値を返す
+      addFoodPromise.then(() => {}).catch(() => {});
       return { ...food, id: 'test-id' };
     });
 
@@ -388,12 +389,11 @@ describe('FoodForm', () => {
     await user.click(submitButton);
 
     // Assert
-    // エラーメッセージが表示されることを確認
-    expect(
-      await screen.findByText(
-        '食材の追加に失敗しました。もう一度お試しください。'
-      )
-    ).toBeInTheDocument();
+    // エラーメッセージが表示されることを確認（部分一致で検索）
+    const errorElement = await screen.findByText(/食材の追加に失敗しました/, {
+      exact: false,
+    });
+    expect(errorElement).toBeInTheDocument();
 
     // 送信状態がリセットされ、ボタンが再度有効になることを確認
     expect(screen.getByRole('button', { name: '登録' })).toBeEnabled();
