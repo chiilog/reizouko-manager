@@ -39,4 +39,24 @@ export const validateFoodName = (name: string): string | null => {
   }
 
   return null;
+};
+
+/**
+ * 賞味期限のバリデーションを行う関数
+ * @param date 賞味期限の日付
+ * @returns エラーメッセージ（エラーがない場合はnull）
+ */
+export const validateExpiryDate = (date: Date | null): string | null => {
+  if (!date) {
+    return '賞味期限を選択してください。';
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  if (date < today) {
+    return '賞味期限は今日以降の日付を選択してください。';
+  }
+
+  return null;
 }; 

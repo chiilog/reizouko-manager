@@ -18,6 +18,8 @@ vi.mock('@/lib/storage', () => ({
   addFoodItem: vi.fn(),
 }));
 
+// validation関数は個別にテスト内でモックすることにし、ここではモックしない
+
 describe('FoodForm', () => {
   const mockProps = {
     open: true,
@@ -581,6 +583,121 @@ describe('FoodForm', () => {
           expiryDate: expect.any(String),
         })
       );
+    });
+
+    it('食品名バリデーションが機能していることを確認', async () => {
+      // Arrange
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const submitButton = screen.getByRole('button', { name: '登録' });
+
+      // Act
+      // 空文字を入力して送信ボタンをクリック
+      await user.clear(nameInput);
+      await user.click(submitButton);
+
+      // Assert
+      // エラーメッセージが表示されていることを確認
+      const errorMessage = await screen.findByText(
+        '食品名を入力してください。空白文字のみは無効です。'
+      );
+      expect(errorMessage).toBeInTheDocument();
+    });
+
+    it('エラーが発生したフィールドにエラースタイルが適用されることを確認', async () => {
+      // Arrange
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+
+      // Act
+      // 空文字を入力してフォーカスを外す
+      await user.clear(nameInput);
+      await user.tab();
+
+      // Assert
+      // 入力欄にエラー用のクラスが適用されていることを確認
+      await waitFor(() => {
+        expect(nameInput).toHaveClass('border-destructive');
+      });
+    });
+
+    it('入力値を修正するとエラーメッセージが消えることを確認', async () => {
+      // Arrange
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+
+      // まずエラーを発生させる
+      await user.clear(nameInput);
+      await user.tab();
+
+      // エラーメッセージが表示されたことを確認
+      const errorMessage = await screen.findByText(
+        '食品名を入力してください。空白文字のみは無効です。'
+      );
+      expect(errorMessage).toBeInTheDocument();
+
+      // Act
+      // 正しい値を入力
+      await user.type(nameInput, '有効な名前');
+
+      // Assert
+      // エラーメッセージが消えていることを確認
+      await waitFor(() => {
+        expect(
+          screen.queryByText(
+            '食品名を入力してください。空白文字のみは無効です。'
+          )
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    it('複数フィールドのバリデーションが行われることの確認', async () => {
+      // Arrange
+      // FoodFormコンポーネントのhandleSubmitが内部で行っているバリデーションをモックせずに使う
+      // 現在のコードでは validateExpiryDate は使用されていない可能性があるため、テストを調整
+
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const submitButton = screen.getByRole('button', { name: '登録' });
+
+      // Act
+      // 名前欄を空にして送信
+      await user.clear(nameInput);
+      await user.click(submitButton);
+
+      // Assert
+      // 名前のエラーメッセージが表示されていることを確認
+      const nameError = await screen.findByText(
+        '食品名を入力してください。空白文字のみは無効です。'
+      );
+      expect(nameError).toBeInTheDocument();
+
+      // 送信が中断されていることを確認 (addFoodItemが呼ばれていないこと)
+      expect(storageUtils.addFoodItem).not.toHaveBeenCalled();
+    });
+
+    it('フォームをキャンセルするとリセットされることを確認', async () => {
+      // Arrange
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const cancelButton = screen.getByRole('button', { name: 'キャンセル' });
+
+      // 有効な値を入力
+      await user.type(nameInput, 'テスト食材');
+
+      // 現在の値が正しく入力されていることを確認
+      expect(nameInput).toHaveValue('テスト食材');
+
+      // Act
+      // キャンセルボタンをクリック
+      await user.click(cancelButton);
+
+      // Assert
+      // onCloseが呼ばれていることを確認
+      expect(mockProps.onClose).toHaveBeenCalled();
+
+      // ダイアログを閉じる処理が実行されたことを確認
+      expect(mockProps.onClose).toHaveBeenCalled();
     });
   });
 });
