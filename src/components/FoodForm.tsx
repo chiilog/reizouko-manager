@@ -71,7 +71,11 @@ export function FoodForm({
   const [error, setError] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
-  // 送信状態は外部から制御されるか、内部状態を使用
+  /**
+   * 送信状態は外部から制御される場合はその値を使用し、
+   * そうでない場合は内部状態を使用します。
+   * 外部から制御する場合は、onSubmittingChange propで状態変更を通知する必要があります。
+   */
   const isSubmitting =
     externalIsSubmitting !== undefined
       ? externalIsSubmitting
