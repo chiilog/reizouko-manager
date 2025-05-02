@@ -334,42 +334,75 @@ describe('FoodForm', () => {
     expect(mockProps.onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('送信処理中は二重送信が防止されることを確認', async () => {
-    // 非同期操作の完了を制御するためのダミー関数
-    const originalAddFoodItem = storageUtils.addFoodItem;
+  /**
+   * 送信状態の外部制御のテスト
+   */
+  it('送信処理中は登録ボタンが無効化されることを確認', () => {
+    // Arrange
+    // 送信中状態をtrueに設定
+    render(<FoodForm {...mockProps} isSubmitting={true} />);
 
-    // 呼び出し回数をカウント
-    let submitCount = 0;
+    // Assert
+    // 登録ボタンが無効化され、「登録中...」というテキストが表示されていることを確認
+    const submitButton = screen.getByRole('button', { name: /登録中/ });
+    expect(submitButton).toBeDisabled();
+    expect(submitButton).toHaveTextContent('登録中...');
+  });
 
-    // 処理遅延をシミュレートする関数を作成
-    vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
-      submitCount++;
+  /**
+   * 送信状態のコールバック処理のテスト
+   */
+  it('送信状態変更時にコールバックが呼び出されることを確認', async () => {
+    // Arrange
+    const onSubmittingChangeMock = vi.fn();
+    render(
+      <FoodForm {...mockProps} onSubmittingChange={onSubmittingChangeMock} />
+    );
 
-      // 実際の処理結果をreturnする
-      return (
-        setTimeout(() => {
-          // 実際には何もしない
-        }, 100) && { ...food, id: 'test-id' }
-      );
-    });
-
-    // Render
-    render(<FoodForm {...mockProps} />);
     const nameInput = screen.getByRole('textbox', { name: '食品名' });
     const submitButton = screen.getByRole('button', { name: '登録' });
 
+    // Act
+    // 食品名を入力して送信
+    await user.type(nameInput, 'テスト食材');
+    await user.click(submitButton);
+
+    // Assert
+    // 送信状態がtrueに変更されたことを確認
+    expect(onSubmittingChangeMock).toHaveBeenCalledWith(true);
+
+    // 処理が終わったら送信状態がfalseに戻ることを確認
+    await waitFor(() => {
+      expect(onSubmittingChangeMock).toHaveBeenCalledWith(false);
+    });
+  });
+
+  /**
+   * 外部から送信状態を制御した場合の二重送信防止テスト
+   */
+  it('送信処理中は二重送信が防止されることを確認', async () => {
+    // Arrange
+    const { rerender } = render(<FoodForm {...mockProps} />);
+
+    const nameInput = screen.getByRole('textbox', { name: '食品名' });
+    const submitButton = screen.getByRole('button', { name: '登録' });
+
+    // Act
     // 食品名を入力
     await user.type(nameInput, 'テスト食材');
 
-    // 登録ボタンを連続で2回クリック
-    await user.click(submitButton);
+    // 登録ボタンをクリック
     await user.click(submitButton);
 
-    // submitCountが1回のままであることを確認（多重送信防止が機能している）
-    expect(submitCount).toBe(1);
+    // 送信中状態でコンポーネントを再レンダリング
+    rerender(<FoodForm {...mockProps} isSubmitting={true} />);
 
-    // テスト終了時にモックをリセット
-    vi.mocked(storageUtils.addFoodItem).mockImplementation(originalAddFoodItem);
+    // 送信中状態で再度クリック
+    await user.click(screen.getByRole('button', { name: /登録中/ }));
+
+    // Assert
+    // addFoodItemが1回だけ呼ばれたことを確認
+    expect(storageUtils.addFoodItem).toHaveBeenCalledTimes(1);
   });
 
   it('エラー発生時も送信状態がリセットされることを確認', async () => {

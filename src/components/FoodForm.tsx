@@ -42,18 +42,51 @@ interface FoodFormProps {
    * 食材追加後の処理
    */
   onFoodAdded: () => void;
+
+  /**
+   * 送信中状態
+   */
+  isSubmitting?: boolean;
+
+  /**
+   * 送信状態変更ハンドラー
+   */
+  onSubmittingChange?: (isSubmitting: boolean) => void;
 }
 
 /**
  * 食材入力用のフォームコンポーネント
  */
-export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
+export function FoodForm({
+  open,
+  onClose,
+  onFoodAdded,
+  isSubmitting: externalIsSubmitting,
+  onSubmittingChange,
+}: FoodFormProps) {
   const [name, setName] = useState('');
   const [date, setDate] = useState<Date>(getDateAfterDays(5));
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [internalIsSubmitting, setInternalIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+
+  // 送信状態は外部から制御されるか、内部状態を使用
+  const isSubmitting =
+    externalIsSubmitting !== undefined
+      ? externalIsSubmitting
+      : internalIsSubmitting;
+
+  /**
+   * 送信状態を更新する
+   */
+  const updateSubmittingState = (submitting: boolean) => {
+    if (onSubmittingChange) {
+      onSubmittingChange(submitting);
+    } else {
+      setInternalIsSubmitting(submitting);
+    }
+  };
 
   /**
    * フォームをリセットする
@@ -82,7 +115,7 @@ export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
     if (isSubmitting) return;
 
     // 送信中フラグをONに
-    setIsSubmitting(true);
+    updateSubmittingState(true);
 
     try {
       // 食材の追加
@@ -97,15 +130,14 @@ export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
       onClose();
     } catch (error) {
       // エラーが発生した場合、エラーメッセージを設定
-      console.error('食材の追加に失敗しました', error);
       setError(
-        `食材の追加に失敗しました。もう一度お試しください。${
-          error instanceof Error ? `\n(${error.message})` : ''
+        `食材の追加に失敗しました。もう一度お試しください。詳細：${
+          error instanceof Error ? error.message : '不明なエラー'
         }`
       );
     } finally {
       // 処理完了時に送信中フラグをOFFに
-      setIsSubmitting(false);
+      updateSubmittingState(false);
     }
   };
 
