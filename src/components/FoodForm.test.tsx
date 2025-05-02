@@ -307,4 +307,137 @@ describe('FoodForm', () => {
 
     return disabledCells;
   }
+
+  /**
+   * 登録ボタンを連続でクリックしても処理が1回だけ実行されることを確認
+   */
+  it('登録ボタンを連続でクリックしても処理が1回だけ実行されることを確認', async () => {
+    // Arrange
+    render(<FoodForm {...mockProps} />);
+    const nameInput = screen.getByRole('textbox', { name: '食品名' });
+    const submitButton = screen.getByRole('button', { name: '登録' });
+
+    // Act
+    // 食品名を入力
+    await user.type(nameInput, 'テスト食材');
+
+    // 登録ボタンを素早く2回クリック
+    await user.click(submitButton);
+    await user.click(submitButton);
+
+    // Assert
+    // addFoodItemが1回だけ呼ばれたことを確認
+    expect(storageUtils.addFoodItem).toHaveBeenCalledTimes(1);
+
+    // 処理が実行されると、onFoodAddedとonCloseが各1回ずつ呼ばれる
+    expect(mockProps.onFoodAdded).toHaveBeenCalledTimes(1);
+    expect(mockProps.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * 送信状態の外部制御のテスト
+   */
+  it('送信処理中は登録ボタンが無効化されることを確認', () => {
+    // Arrange
+    // 送信中状態をtrueに設定
+    render(<FoodForm {...mockProps} isSubmitting={true} />);
+
+    // Assert
+    // 登録ボタンが無効化され、「登録中...」というテキストが表示されていることを確認
+    const submitButton = screen.getByRole('button', { name: /登録中/ });
+    expect(submitButton).toBeDisabled();
+    expect(submitButton).toHaveTextContent('登録中...');
+  });
+
+  /**
+   * 送信状態のコールバック処理のテスト
+   */
+  it('送信状態変更時にコールバックが呼び出されることを確認', async () => {
+    // Arrange
+    const onSubmittingChangeMock = vi.fn();
+    render(
+      <FoodForm {...mockProps} onSubmittingChange={onSubmittingChangeMock} />
+    );
+
+    const nameInput = screen.getByRole('textbox', { name: '食品名' });
+    const submitButton = screen.getByRole('button', { name: '登録' });
+
+    // Act
+    // 食品名を入力して送信
+    await user.type(nameInput, 'テスト食材');
+    await user.click(submitButton);
+
+    // Assert
+    // 送信状態がtrueに変更されたことを確認
+    expect(onSubmittingChangeMock).toHaveBeenCalledWith(true);
+
+    // 処理が終わったら送信状態がfalseに戻ることを確認
+    await waitFor(() => {
+      expect(onSubmittingChangeMock).toHaveBeenCalledWith(false);
+    });
+  });
+
+  /**
+   * 外部から送信状態を制御した場合の二重送信防止テスト
+   */
+  it('送信処理中は二重送信が防止されることを確認', async () => {
+    // Arrange
+    // addFoodItem関数をモック
+    vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
+      // FoodItem型を適切に返すために型アサーションを使用
+      return { ...food, id: 'test-id' } as const;
+    });
+
+    const { rerender } = render(<FoodForm {...mockProps} />);
+
+    const nameInput = screen.getByRole('textbox', { name: '食品名' });
+    const submitButton = screen.getByRole('button', { name: '登録' });
+
+    // Act
+    // 食品名を入力
+    await user.type(nameInput, 'テスト食材');
+
+    // 登録ボタンをクリック
+    await user.click(submitButton);
+
+    // 送信中状態でコンポーネントを再レンダリング
+    rerender(<FoodForm {...mockProps} isSubmitting={true} />);
+
+    // 送信中状態で再度クリック
+    await user.click(screen.getByRole('button', { name: /登録中/ }));
+
+    // Assert
+    // addFoodItemが1回だけ呼ばれたことを確認
+    expect(storageUtils.addFoodItem).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * 非同期のエラー処理をテスト
+   */
+  it('エラー発生時も送信状態がリセットされることを確認', async () => {
+    // Arrange
+    // addFoodItemがエラーをスローすることをシミュレート
+    vi.mocked(storageUtils.addFoodItem).mockImplementation(() => {
+      throw new Error('テストエラー');
+    });
+
+    render(<FoodForm {...mockProps} />);
+    const nameInput = screen.getByRole('textbox', { name: '食品名' });
+    const submitButton = screen.getByRole('button', { name: '登録' });
+
+    // Act
+    // 食品名を入力して送信
+    await user.type(nameInput, 'テスト食材');
+    await user.click(submitButton);
+
+    // Assert
+    // エラーメッセージが表示されることを確認
+    const errorElement = await screen.findByText(/食材の追加に失敗しました/, {
+      exact: false,
+    });
+    expect(errorElement).toBeInTheDocument();
+
+    // 送信状態がリセットされ、ボタンが再度有効になることを確認
+    expect(screen.getByRole('button', { name: '登録' })).toBeEnabled();
+  });
 });

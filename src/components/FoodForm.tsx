@@ -25,6 +25,7 @@ import {
   getDateAfterDays,
 } from '@/lib/date-utils';
 import { addFoodItem } from '@/lib/storage';
+import { Loader2 } from 'lucide-react';
 
 interface FoodFormProps {
   /**
@@ -41,16 +42,55 @@ interface FoodFormProps {
    * 食材追加後の処理
    */
   onFoodAdded: () => void;
+
+  /**
+   * 送信中状態
+   */
+  isSubmitting?: boolean;
+
+  /**
+   * 送信状態変更ハンドラー
+   */
+  onSubmittingChange?: (isSubmitting: boolean) => void;
 }
 
 /**
  * 食材入力用のフォームコンポーネント
  */
-export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
+export function FoodForm({
+  open,
+  onClose,
+  onFoodAdded,
+  isSubmitting: externalIsSubmitting,
+  onSubmittingChange,
+}: FoodFormProps) {
   const [name, setName] = useState('');
   const [date, setDate] = useState<Date>(getDateAfterDays(5));
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [internalIsSubmitting, setInternalIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * 送信状態は外部から制御される場合はその値を使用し、
+   * そうでない場合は内部状態を使用します。
+   * 外部から制御する場合は、onSubmittingChange propで状態変更を通知する必要があります。
+   */
+  const isSubmitting =
+    externalIsSubmitting !== undefined
+      ? externalIsSubmitting
+      : internalIsSubmitting;
+
+  /**
+   * 送信状態を更新する
+   */
+  const updateSubmittingState = (submitting: boolean) => {
+    if (onSubmittingChange) {
+      onSubmittingChange(submitting);
+    } else {
+      setInternalIsSubmitting(submitting);
+    }
+  };
 
   /**
    * フォームをリセットする
@@ -58,6 +98,7 @@ export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
   const resetForm = () => {
     setName('');
     setDate(getDateAfterDays(5));
+    setError(null);
   };
 
   /**
@@ -71,14 +112,35 @@ export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
       return;
     }
 
-    addFoodItem({
-      name,
-      expiryDate: formatDateToISOString(date),
-    });
+    // エラーをリセット
+    setError(null);
 
-    onFoodAdded();
-    resetForm();
-    onClose();
+    // 既に送信中の場合は処理を中断
+    if (isSubmitting) return;
+
+    // 送信中フラグをONに
+    updateSubmittingState(true);
+
+    try {
+      // 食材の追加
+      addFoodItem({
+        name,
+        expiryDate: formatDateToISOString(date),
+      });
+
+      // 親コンポーネントに通知
+      onFoodAdded();
+      resetForm();
+      onClose();
+    } catch (error) {
+      // エラーが発生した場合、エラーメッセージを設定
+      console.error('食材の追加に失敗しました', error);
+      // ユーザーにはシンプルなメッセージを表示
+      setError('食材の追加に失敗しました。もう一度お試しください。');
+    } finally {
+      // 処理完了時に送信中フラグをOFFに
+      updateSubmittingState(false);
+    }
   };
 
   return (
@@ -137,13 +199,29 @@ export function FoodForm({ open, onClose, onFoodAdded }: FoodFormProps) {
                 </PopoverContent>
               </Popover>
             </div>
+
+            {/* エラーメッセージ表示エリア */}
+            {error && (
+              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                {error}
+              </div>
+            )}
           </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               キャンセル
             </Button>
-            <Button type="submit">登録</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  登録中...
+                </>
+              ) : (
+                '登録'
+              )}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
