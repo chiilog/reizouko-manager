@@ -194,8 +194,13 @@ describe('FoodForm', () => {
     expect(calendar).toBeVisible();
 
     // 今日の日付を取得
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // 時刻をリセット
+    const today = new Date(
+      Date.UTC(
+        new Date().getFullYear(),
+        new Date().getMonth(),
+        new Date().getDate()
+      )
+    ); // タイムゾーンを考慮
 
     // 昨日の日付を取得
     const yesterday = new Date(today);
@@ -254,6 +259,15 @@ describe('FoodForm', () => {
       });
 
       expect(disabledCells.length).toBeGreaterThan(0);
+      // 各セルが実際にdisabled状態であることを確認
+      disabledCells.forEach((cell) => {
+        // disabled状態を示す属性のいずれかが存在することを確認
+        expect(
+          cell.hasAttribute('data-disabled') ||
+            cell.getAttribute('aria-disabled') === 'true' ||
+            cell.classList.contains('disabled')
+        ).toBe(true);
+      });
     }
 
     // テスト終了時に日付が変更されていないことを最終確認
