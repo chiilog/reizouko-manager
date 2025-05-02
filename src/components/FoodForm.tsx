@@ -177,10 +177,8 @@ export function FoodForm({
                 value={name}
                 onChange={(e) => {
                   const newValue = e.target.value;
-                  setName(newValue);
-
-                  // リアルタイムでバリデーションを行う
                   const validationError = validateFoodName(newValue);
+                  setName(newValue);
                   setError(validationError);
                 }}
                 maxLength={MAX_NAME_LENGTH}
