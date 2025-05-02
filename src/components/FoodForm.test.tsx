@@ -63,6 +63,11 @@ describe('FoodForm', () => {
 
   it('フォーム送信時に正しい処理が行われることを確認', async () => {
     // Arrange
+    // addFoodItemが正常に動作することをシミュレート
+    vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
+      return { ...food, id: 'test-id' };
+    });
+
     render(<FoodForm {...mockProps} />);
     const nameInput = screen.getByRole('textbox', { name: '食品名' });
     const submitButton = screen.getByRole('button', { name: '登録' });
@@ -124,6 +129,11 @@ describe('FoodForm', () => {
    */
   it('ユーザー操作を使って食材を追加できることを確認', async () => {
     // Arrange
+    // addFoodItemが正常に動作することをシミュレート
+    vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
+      return { ...food, id: 'test-id' };
+    });
+
     render(<FoodForm {...mockProps} />);
 
     // フォーム内の要素を取得
@@ -319,6 +329,11 @@ describe('FoodForm', () => {
    */
   it('登録ボタンを連続でクリックしても処理が1回だけ実行されることを確認', async () => {
     // Arrange
+    // addFoodItemが正常に動作することをシミュレート
+    vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
+      return { ...food, id: 'test-id' };
+    });
+
     render(<FoodForm {...mockProps} />);
     const nameInput = screen.getByRole('textbox', { name: '食品名' });
     const submitButton = screen.getByRole('button', { name: '登録' });
@@ -361,6 +376,11 @@ describe('FoodForm', () => {
   it('送信状態変更時にコールバックが呼び出されることを確認', async () => {
     // Arrange
     const onSubmittingChangeMock = vi.fn();
+    // addFoodItemが正常に動作することをシミュレート
+    vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
+      return { ...food, id: 'test-id' };
+    });
+
     render(
       <FoodForm {...mockProps} onSubmittingChange={onSubmittingChangeMock} />
     );
@@ -540,6 +560,11 @@ describe('FoodForm', () => {
 
     it('入力値がトリムされることを確認', async () => {
       // Arrange
+      // addFoodItemが正常に動作することをシミュレート
+      vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
+        return { ...food, id: 'test-id' };
+      });
+
       render(<FoodForm {...mockProps} />);
       const nameInput = screen.getByRole('textbox', { name: '食品名' });
       const submitButton = screen.getByRole('button', { name: '登録' });
