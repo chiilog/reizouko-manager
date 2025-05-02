@@ -130,11 +130,9 @@ export function FoodForm({
       onClose();
     } catch (error) {
       // エラーが発生した場合、エラーメッセージを設定
-      setError(
-        `食材の追加に失敗しました。もう一度お試しください。詳細：${
-          error instanceof Error ? error.message : '不明なエラー'
-        }`
-      );
+      console.error('食材の追加に失敗しました', error);
+      // ユーザーにはシンプルなメッセージを表示
+      setError('食材の追加に失敗しました。もう一度お試しください。');
     } finally {
       // 処理完了時に送信中フラグをOFFに
       updateSubmittingState(false);
