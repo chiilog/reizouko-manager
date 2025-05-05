@@ -581,6 +581,10 @@ describe('FoodForm', () => {
         '食品名を入力してください。空白文字のみは無効です。'
       );
       expect(errorMessage).toBeInTheDocument();
+      // エラーメッセージの内容が期待どおりであることを確認
+      expect(errorMessage.textContent).toBe(
+        '食品名を入力してください。空白文字のみは無効です。'
+      );
     });
 
     it('エラーが発生したフィールドにエラースタイルが適用されることを確認', async () => {
@@ -588,15 +592,24 @@ describe('FoodForm', () => {
       render(<FoodForm {...mockProps} />);
       const nameInput = screen.getByRole('textbox', { name: '食品名' });
 
-      // Act
+      // Act - エラー状態の確認
       // 空文字を入力してフォーカスを外す
       await user.clear(nameInput);
       await user.tab();
 
-      // Assert
-      // 入力欄にエラー用のクラスが適用されていることを確認
+      // Assert - エラー状態でスタイルが適用されていることを確認
       await waitFor(() => {
         expect(nameInput).toHaveClass('border-destructive');
+      });
+
+      // Act - エラー解消の確認
+      // 有効な値を入力
+      await user.type(nameInput, 'テスト');
+      await user.tab();
+
+      // Assert - エラーが解消されてスタイルが削除されることを確認
+      await waitFor(() => {
+        expect(nameInput).not.toHaveClass('border-destructive');
       });
     });
 
