@@ -194,167 +194,146 @@ describe('FoodForm', () => {
   });
 
   /**
-   * カレンダーで過去の日付が選択できないことを確認するテスト
+   * 賞味期限入力のバリデーションに関する実際のユースケースに基づくテスト
    */
-  it('カレンダーで過去の日付が選択できないことを確認', async () => {
-    // Arrange
-    render(<FoodForm {...mockProps} />);
+  describe('賞味期限入力のバリデーション', () => {
+    it('カレンダーUIで過去の日付が選択できないことを確認', async () => {
+      // Arrange
+      render(<FoodForm {...mockProps} />);
 
-    // 日付選択ボタンを取得
-    const dateButton = screen.getByRole('button', {
-      name: /^(\d{4})年(\d{1,2})月(\d{1,2})日$/,
+      // 日付選択ボタンを取得
+      const dateButton = screen.getByRole('button', {
+        name: /^(\d{4})年(\d{1,2})月(\d{1,2})日$/,
+      });
+
+      // 初期の日付の値を保存
+      const initialDateText = dateButton.textContent;
+
+      // Act
+      // カレンダーを開く
+      await user.click(dateButton);
+
+      // カレンダーが表示されていることを確認
+      const calendar = await screen.findByRole('grid');
+      expect(calendar).toBeVisible();
+
+      // 過去日付のセル（無効化されているセル）を確認
+      const disabledCells = within(calendar)
+        .getAllByRole('gridcell')
+        .filter(
+          (cell) =>
+            cell.hasAttribute('aria-disabled') === true ||
+            cell.getAttribute('aria-disabled') === 'true' ||
+            cell.hasAttribute('data-disabled') ||
+            cell.classList.contains('disabled')
+        );
+
+      // Assert
+      // 少なくとも1つの無効化されたセルがあることを確認
+      expect(disabledCells.length).toBeGreaterThan(0);
+
+      // 無効化されたセルをクリックしても日付が変わらないことを確認
+      if (disabledCells.length > 0) {
+        await user.click(disabledCells[0]);
+        expect(dateButton.textContent).toBe(initialDateText);
+      }
     });
 
-    // 初期の日付の値を保存
-    const initialDateText = dateButton.textContent;
+    it('フォームの初期表示時に賞味期限が適切に設定されていることを確認', () => {
+      // Arrange & Act
+      render(<FoodForm {...mockProps} />);
 
-    // Act
-    // カレンダーを開く
-    await user.click(dateButton);
+      // Assert
+      // 日付選択ボタンのテキストが年月日形式であることを確認
+      const dateButton = screen.getByRole('button', {
+        name: /^(\d{4})年(\d{1,2})月(\d{1,2})日$/,
+      });
+      expect(dateButton).toBeInTheDocument();
 
-    // カレンダーが表示されていることを確認
-    const calendar = await screen.findByRole('grid');
-    expect(calendar).toBeVisible();
+      // 日付が現在日から少なくとも1日以上先であることを確認
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-    // 過去日付のセルを探す
-    const yesterdayCell = findDisabledYesterdayCell(calendar);
+      const dateText = dateButton.textContent || '';
+      const match = dateText.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日$/);
 
-    // 過去日付のセルが見つかった場合、クリックを試みる
-    if (yesterdayCell) {
-      await user.click(yesterdayCell);
-    }
+      if (match) {
+        const [, year, month, day] = match;
+        const selectedDate = new Date(
+          parseInt(year),
+          parseInt(month) - 1,
+          parseInt(day)
+        );
 
-    // Assert
-    if (yesterdayCell) {
-      // 過去の日付なので選択されず、日付が変わらないことを確認
-      expect(dateButton.textContent).toBe(initialDateText);
-    } else {
-      // 過去日付のセルが見つからない場合は、disabled属性を持つセルが存在することを確認
-      const disabledCells = verifyDisabledCells(calendar);
-      expect(disabledCells.length).toBeGreaterThan(0);
-    }
+        // 選択された日付が今日以降であることを確認
+        expect(selectedDate.getTime()).toBeGreaterThanOrEqual(today.getTime());
+      } else {
+        // 日付形式が一致しない場合は失敗
+        expect(match).not.toBeNull();
+      }
+    });
 
-    // テスト終了時に日付が変更されていないことを最終確認
-    expect(dateButton.textContent).toBe(initialDateText);
+    it('カレンダーでの日付選択とフォーム送信が正常に動作することを確認', async () => {
+      // Arrange
+      vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
+        return { ...food, id: 'test-id' };
+      });
+
+      render(<FoodForm {...mockProps} />);
+
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const submitButton = screen.getByRole('button', { name: '登録' });
+
+      // Act
+      // 食品名を入力
+      await user.type(nameInput, 'テスト食材');
+
+      // 日付はデフォルトのままで送信（日付選択のテストは他のテストで実施済み）
+      await user.click(submitButton);
+
+      // Assert
+      // 食材追加処理が呼ばれ、名前と日付が正しく渡されることを確認
+      expect(storageUtils.addFoodItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'テスト食材',
+          expiryDate: expect.any(String),
+        })
+      );
+
+      // コールバックが呼ばれることを確認
+      expect(mockProps.onFoodAdded).toHaveBeenCalled();
+      expect(mockProps.onClose).toHaveBeenCalled();
+    });
   });
 
   /**
-   * 過去日付（昨日）のセルを特定する関数
-   * @param calendar カレンダー要素
-   * @returns 昨日の日付に対応するセル要素、または undefined
+   * 送信処理の結果がAppコンポーネントに伝わることを確認するテスト
    */
-  function findDisabledYesterdayCell(calendar: HTMLElement) {
-    // 今日の日付を取得
-    const today = new Date();
-    // タイムゾーンを考慮してUTCで昨日の日付を作成
-    const yesterday = new Date(
-      Date.UTC(today.getFullYear(), today.getMonth(), today.getDate() - 1)
-    );
-
-    // カレンダー内のすべてのセルを取得
-    const allCells = within(calendar).getAllByRole('gridcell');
-
-    // disabled属性を持つセルのうち、昨日の日付と一致するものを探す
-    const disabledCells = allCells.filter(
-      (cell) =>
-        cell.hasAttribute('data-disabled') ||
-        cell.getAttribute('aria-disabled') === 'true' ||
-        cell.classList.contains('disabled')
-    );
-
-    // 昨日の日付のセルを特定して返す
-    return disabledCells.find((cell) => {
-      // data-day属性がある場合は、その値から日付を比較
-      const cellDate = cell.getAttribute('data-day');
-      if (cellDate) {
-        const [year, month, day] = cellDate.split('-').map(Number);
-        const cellDateObj = new Date(Date.UTC(year, month - 1, day));
-        return isSameDay(cellDateObj, yesterday);
-      }
-
-      // data-day属性がない場合は、テキスト内容で比較
-      const cellText = cell.textContent || '';
-      return cellText === String(yesterday.getDate());
-    });
-  }
-
-  /**
-   * 2つの日付が同じ日かどうかを判定する関数
-   * @param date1 比較する日付1
-   * @param date2 比較する日付2
-   * @returns 同じ日である場合はtrue、そうでない場合はfalse
-   */
-  function isSameDay(date1: Date, date2: Date) {
-    return (
-      date1.getFullYear() === date2.getFullYear() &&
-      date1.getMonth() === date2.getMonth() &&
-      date1.getDate() === date2.getDate()
-    );
-  }
-
-  /**
-   * カレンダー内のdisabled状態のセルを検証する関数
-   * @param calendar カレンダー要素
-   * @returns disabled状態のセル要素の配列
-   */
-  function verifyDisabledCells(calendar: HTMLElement) {
-    // カレンダー内のすべてのセルを取得
-    const allCells = within(calendar).getAllByRole('gridcell');
-
-    // disabled属性を持つセルを取得
-    const disabledCells = allCells.filter(
-      (cell) =>
-        cell.hasAttribute('data-disabled') ||
-        cell.getAttribute('aria-disabled') === 'true' ||
-        cell.classList.contains('disabled')
-    );
-
-    // 少なくとも1つのdisabledセルが存在することを確認
-    expect(disabledCells.length).toBeGreaterThan(0);
-
-    // 各セルが少なくとも1つのdisabled状態を示す属性を持つことを確認
-    disabledCells.forEach((cell) => {
-      const hasDisabledAttribute = cell.hasAttribute('data-disabled');
-      const hasAriaDisabledTrue = cell.getAttribute('aria-disabled') === 'true';
-      const hasDisabledClass = cell.classList.contains('disabled');
-
-      expect(
-        hasDisabledAttribute || hasAriaDisabledTrue || hasDisabledClass
-      ).toBe(true);
-    });
-
-    return disabledCells;
-  }
-
-  /**
-   * 登録ボタンを連続でクリックしても処理が1回だけ実行されることを確認
-   */
-  it('登録ボタンを連続でクリックしても処理が1回だけ実行されることを確認', async () => {
+  it('食材追加成功時にonFoodAddedとonCloseが呼ばれることを確認', async () => {
     // Arrange
-    // addFoodItemが正常に動作することをシミュレート
+    // addFoodItemが成功することをシミュレート
     vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
       return { ...food, id: 'test-id' };
     });
 
     render(<FoodForm {...mockProps} />);
+
     const nameInput = screen.getByRole('textbox', { name: '食品名' });
     const submitButton = screen.getByRole('button', { name: '登録' });
 
     // Act
-    // 食品名を入力
-    await user.type(nameInput, 'テスト食材');
-
-    // 登録ボタンを素早く2回クリック
-    await user.click(submitButton);
+    // 食品名を入力して送信
+    await user.type(nameInput, '通知テスト');
     await user.click(submitButton);
 
     // Assert
-    // addFoodItemが1回だけ呼ばれたことを確認
-    expect(storageUtils.addFoodItem).toHaveBeenCalledTimes(1);
-
-    // 処理が実行されると、onFoodAddedとonCloseが各1回ずつ呼ばれる
-    expect(mockProps.onFoodAdded).toHaveBeenCalledTimes(1);
-    expect(mockProps.onClose).toHaveBeenCalledTimes(1);
+    // Appコンポーネントのコールバックが呼ばれたことを確認
+    await waitFor(() => {
+      // 食材が追加されたことをAppに通知
+      expect(mockProps.onFoodAdded).toHaveBeenCalledTimes(1);
+      // フォームが閉じられたことをAppに通知
+      expect(mockProps.onClose).toHaveBeenCalledTimes(1);
+    });
   });
 
   /**

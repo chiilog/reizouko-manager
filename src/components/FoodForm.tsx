@@ -154,6 +154,18 @@ export function FoodForm({
   };
 
   /**
+   * 日付選択のブラー時の処理
+   */
+  const handleDateBlur = () => {
+    const dateError = validateExpiryDate(date);
+    if (dateError) {
+      setErrors((prev) => ({ ...prev, expiryDate: dateError }));
+    } else if (errors.expiryDate) {
+      setErrors((prev) => ({ ...prev, expiryDate: undefined }));
+    }
+  };
+
+  /**
    * フォーム送信時の処理
    */
   const handleSubmit = (e: React.FormEvent) => {
@@ -277,6 +289,7 @@ export function FoodForm({
                     aria-describedby={
                       errors.expiryDate ? 'expiry-date-error' : undefined
                     }
+                    onBlur={handleDateBlur}
                   >
                     {date ? formatDateToJapanese(date) : '日付を選択'}
                   </Button>
