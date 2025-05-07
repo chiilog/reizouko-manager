@@ -43,10 +43,10 @@ export const validateFoodName = (name: string): string | null => {
 
 /**
  * 賞味期限のバリデーションを行う関数
- * @param date 賞味期限の日付
+ * @param date 賞味期限の日付（undefined または null の場合は未選択を意味する）
  * @returns エラーメッセージ（エラーがない場合はnull）
  */
-export const validateExpiryDate = (date: Date | null): string | null => {
+export const validateExpiryDate = (date: Date | undefined | null): string | null => {
   if (!date) {
     return '賞味期限を選択してください。';
   }
