@@ -2,7 +2,7 @@
  * カスタム日付選択コンポーネント
  * @description PopoverとCalendarを組み合わせた再利用可能な日付選択UIを提供します。
  */
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -245,9 +245,14 @@ export function CustomDatePicker({
   const [isOpen, setIsOpen] = useState(false);
 
   // minDateが指定されていない場合は今日をデフォルトとする
-  const effectiveMinDate = minDate || new Date();
+  // effectiveMinDateをuseMemo内に移動して依存関係の問題を解決
+  const effectiveMinDate = useMemo(() => minDate || new Date(), [minDate]);
+
   // 過去の日付を選択不可にするための修飾子
-  const disabledDays = [{ before: effectiveMinDate }];
+  const disabledDays = useMemo(
+    () => [{ before: effectiveMinDate }],
+    [effectiveMinDate]
+  );
 
   // 選択日付が最小日付より前の場合に修正する（最小日付が変更された場合に対応）
   useEffect(() => {
@@ -262,44 +267,50 @@ export function CustomDatePicker({
    * @param {Date | undefined} date - 検証する日付
    * @returns {boolean} 日付が有効ならtrue、そうでなければfalse
    */
-  const isValidDate = (date: Date | undefined): boolean => {
-    if (!date) return false;
+  const isValidDate = useCallback(
+    (date: Date | undefined): boolean => {
+      if (!date) return false;
 
-    // 日付オブジェクトが有効かどうか
-    if (isNaN(date.getTime())) return false;
+      // 日付オブジェクトが有効かどうか
+      if (isNaN(date.getTime())) return false;
 
-    // 最小日付以降かどうか
-    if (minDate && date < minDate) return false;
+      // 最小日付以降かどうか
+      if (minDate && date < minDate) return false;
 
-    return true;
-  };
+      return true;
+    },
+    [minDate]
+  );
 
   /**
    * 日付がカレンダーから選択されたときのハンドラ
    * @param {Date | undefined} date - 選択された日付、または未選択を示すundefined
    */
-  const handleDateSelect = (date: Date | undefined) => {
-    try {
-      // 日付の妥当性検証
-      if (date && !isValidDate(date)) {
-        console.warn(
-          '無効な日付が選択されました。日付の選択をスキップします。'
-        );
-        setIsOpen(false);
-        return;
-      }
+  const handleDateSelect = useCallback(
+    (date: Date | undefined) => {
+      try {
+        // 日付の妥当性検証
+        if (date && !isValidDate(date)) {
+          console.warn(
+            '無効な日付が選択されました。日付の選択をスキップします。'
+          );
+          setIsOpen(false);
+          return;
+        }
 
-      onDateChange(date);
-      setIsOpen(false); // 日付を選択したらPopoverを閉じる
-    } catch (error) {
-      console.error('日付選択処理中にエラーが発生しました:', error);
-      // エラーが発生しても、UIは壊さない
-      setIsOpen(false);
-    }
-  };
+        onDateChange(date);
+        setIsOpen(false); // 日付を選択したらPopoverを閉じる
+      } catch (error) {
+        console.error('日付選択処理中にエラーが発生しました:', error);
+        // エラーが発生しても、UIは壊さない
+        setIsOpen(false);
+      }
+    },
+    [isValidDate, onDateChange]
+  );
 
   // 初期表示月を設定する際のフォールバック処理
-  const getDefaultMonth = (): Date => {
+  const getDefaultMonth = useCallback((): Date => {
     try {
       if (selectedDate && isValidDate(selectedDate)) {
         return selectedDate;
@@ -314,7 +325,13 @@ export function CustomDatePicker({
       // エラーが発生した場合は今日の日付を返す
       return new Date();
     }
-  };
+  }, [selectedDate, initialDate, isValidDate]);
+
+  // 表示するラベルテキスト
+  const buttonLabelText = useMemo(
+    () => (selectedDate ? formatDateToJapanese(selectedDate) : placeholder),
+    [selectedDate, placeholder]
+  );
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -327,9 +344,7 @@ export function CustomDatePicker({
             isError && 'border-destructive focus-visible:ring-destructive', // エラー時のスタイル
             className
           )}
-          aria-label={
-            selectedDate ? formatDateToJapanese(selectedDate) : placeholder
-          }
+          aria-label={buttonLabelText}
           aria-invalid={isError}
         >
           <CalendarIcon className="mr-2 h-4 w-4" />
