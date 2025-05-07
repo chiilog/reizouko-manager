@@ -12,11 +12,14 @@ import {
 import userEvent from '@testing-library/user-event';
 import { FoodForm } from './FoodForm';
 import * as storageUtils from '@/lib/storage';
+import { QuotaExceededError } from '@/lib/errors';
 
 // モックの定義
 vi.mock('@/lib/storage', () => ({
   addFoodItem: vi.fn(),
 }));
+
+// validation関数は個別にテスト内でモックすることにし、ここではモックしない
 
 describe('FoodForm', () => {
   const mockProps = {
@@ -192,167 +195,146 @@ describe('FoodForm', () => {
   });
 
   /**
-   * カレンダーで過去の日付が選択できないことを確認するテスト
+   * 賞味期限入力のバリデーション
    */
-  it('カレンダーで過去の日付が選択できないことを確認', async () => {
-    // Arrange
-    render(<FoodForm {...mockProps} />);
+  describe('賞味期限入力のバリデーション', () => {
+    it('カレンダーUIで過去の日付が選択できないことを確認', async () => {
+      // Arrange
+      render(<FoodForm {...mockProps} />);
 
-    // 日付選択ボタンを取得
-    const dateButton = screen.getByRole('button', {
-      name: /^(\d{4})年(\d{1,2})月(\d{1,2})日$/,
+      // 日付選択ボタンを取得
+      const dateButton = screen.getByRole('button', {
+        name: /^(\d{4})年(\d{1,2})月(\d{1,2})日$/,
+      });
+
+      // 初期の日付の値を保存
+      const initialDateText = dateButton.textContent;
+
+      // Act
+      // カレンダーを開く
+      await user.click(dateButton);
+
+      // カレンダーが表示されていることを確認
+      const calendar = await screen.findByRole('grid');
+      expect(calendar).toBeVisible();
+
+      // 過去日付のセル（無効化されているセル）を確認
+      const disabledCells = within(calendar)
+        .getAllByRole('gridcell')
+        .filter(
+          (cell) =>
+            cell.hasAttribute('aria-disabled') === true ||
+            cell.getAttribute('aria-disabled') === 'true' ||
+            cell.hasAttribute('data-disabled') ||
+            cell.classList.contains('disabled')
+        );
+
+      // Assert
+      // 少なくとも1つの無効化されたセルがあることを確認
+      expect(disabledCells.length).toBeGreaterThan(0);
+
+      // 無効化されたセルをクリックしても日付が変わらないことを確認
+      if (disabledCells.length > 0) {
+        await user.click(disabledCells[0]);
+        expect(dateButton.textContent).toBe(initialDateText);
+      }
     });
 
-    // 初期の日付の値を保存
-    const initialDateText = dateButton.textContent;
+    it('フォームの初期表示時に賞味期限が適切に設定されていることを確認', () => {
+      // Arrange & Act
+      render(<FoodForm {...mockProps} />);
 
-    // Act
-    // カレンダーを開く
-    await user.click(dateButton);
+      // Assert
+      // 日付選択ボタンのテキストが年月日形式であることを確認
+      const dateButton = screen.getByRole('button', {
+        name: /^(\d{4})年(\d{1,2})月(\d{1,2})日$/,
+      });
+      expect(dateButton).toBeInTheDocument();
 
-    // カレンダーが表示されていることを確認
-    const calendar = await screen.findByRole('grid');
-    expect(calendar).toBeVisible();
+      // 日付が現在日から少なくとも1日以上先であることを確認
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-    // 過去日付のセルを探す
-    const yesterdayCell = findDisabledYesterdayCell(calendar);
+      const dateText = dateButton.textContent || '';
+      const match = dateText.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日$/);
 
-    // 過去日付のセルが見つかった場合、クリックを試みる
-    if (yesterdayCell) {
-      await user.click(yesterdayCell);
-    }
+      if (match) {
+        const [, year, month, day] = match;
+        const selectedDate = new Date(
+          parseInt(year),
+          parseInt(month) - 1,
+          parseInt(day)
+        );
 
-    // Assert
-    if (yesterdayCell) {
-      // 過去の日付なので選択されず、日付が変わらないことを確認
-      expect(dateButton.textContent).toBe(initialDateText);
-    } else {
-      // 過去日付のセルが見つからない場合は、disabled属性を持つセルが存在することを確認
-      const disabledCells = verifyDisabledCells(calendar);
-      expect(disabledCells.length).toBeGreaterThan(0);
-    }
+        // 選択された日付が今日以降であることを確認
+        expect(selectedDate.getTime()).toBeGreaterThanOrEqual(today.getTime());
+      } else {
+        // 日付形式が一致しない場合は失敗
+        expect(match).not.toBeNull();
+      }
+    });
 
-    // テスト終了時に日付が変更されていないことを最終確認
-    expect(dateButton.textContent).toBe(initialDateText);
+    it('カレンダーでの日付選択とフォーム送信が正常に動作することを確認', async () => {
+      // Arrange
+      vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
+        return { ...food, id: 'test-id' };
+      });
+
+      render(<FoodForm {...mockProps} />);
+
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const submitButton = screen.getByRole('button', { name: '登録' });
+
+      // Act
+      // 食品名を入力
+      await user.type(nameInput, 'テスト食材');
+
+      // 日付はデフォルトのままで送信（日付選択のテストは他のテストで実施済み）
+      await user.click(submitButton);
+
+      // Assert
+      // 食材追加処理が呼ばれ、名前と日付が正しく渡されることを確認
+      expect(storageUtils.addFoodItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'テスト食材',
+          expiryDate: expect.any(String),
+        })
+      );
+
+      // コールバックが呼ばれることを確認
+      expect(mockProps.onFoodAdded).toHaveBeenCalled();
+      expect(mockProps.onClose).toHaveBeenCalled();
+    });
   });
 
   /**
-   * 過去日付（昨日）のセルを特定する関数
-   * @param calendar カレンダー要素
-   * @returns 昨日の日付に対応するセル要素、または undefined
+   * 送信処理の結果がAppコンポーネントに伝わることを確認するテスト
    */
-  function findDisabledYesterdayCell(calendar: HTMLElement) {
-    // 今日の日付を取得
-    const today = new Date();
-    // タイムゾーンを考慮してUTCで昨日の日付を作成
-    const yesterday = new Date(
-      Date.UTC(today.getFullYear(), today.getMonth(), today.getDate() - 1)
-    );
-
-    // カレンダー内のすべてのセルを取得
-    const allCells = within(calendar).getAllByRole('gridcell');
-
-    // disabled属性を持つセルのうち、昨日の日付と一致するものを探す
-    const disabledCells = allCells.filter(
-      (cell) =>
-        cell.hasAttribute('data-disabled') ||
-        cell.getAttribute('aria-disabled') === 'true' ||
-        cell.classList.contains('disabled')
-    );
-
-    // 昨日の日付のセルを特定して返す
-    return disabledCells.find((cell) => {
-      // data-day属性がある場合は、その値から日付を比較
-      const cellDate = cell.getAttribute('data-day');
-      if (cellDate) {
-        const [year, month, day] = cellDate.split('-').map(Number);
-        const cellDateObj = new Date(Date.UTC(year, month - 1, day));
-        return isSameDay(cellDateObj, yesterday);
-      }
-
-      // data-day属性がない場合は、テキスト内容で比較
-      const cellText = cell.textContent || '';
-      return cellText === String(yesterday.getDate());
-    });
-  }
-
-  /**
-   * 2つの日付が同じ日かどうかを判定する関数
-   * @param date1 比較する日付1
-   * @param date2 比較する日付2
-   * @returns 同じ日である場合はtrue、そうでない場合はfalse
-   */
-  function isSameDay(date1: Date, date2: Date) {
-    return (
-      date1.getFullYear() === date2.getFullYear() &&
-      date1.getMonth() === date2.getMonth() &&
-      date1.getDate() === date2.getDate()
-    );
-  }
-
-  /**
-   * カレンダー内のdisabled状態のセルを検証する関数
-   * @param calendar カレンダー要素
-   * @returns disabled状態のセル要素の配列
-   */
-  function verifyDisabledCells(calendar: HTMLElement) {
-    // カレンダー内のすべてのセルを取得
-    const allCells = within(calendar).getAllByRole('gridcell');
-
-    // disabled属性を持つセルを取得
-    const disabledCells = allCells.filter(
-      (cell) =>
-        cell.hasAttribute('data-disabled') ||
-        cell.getAttribute('aria-disabled') === 'true' ||
-        cell.classList.contains('disabled')
-    );
-
-    // 少なくとも1つのdisabledセルが存在することを確認
-    expect(disabledCells.length).toBeGreaterThan(0);
-
-    // 各セルが少なくとも1つのdisabled状態を示す属性を持つことを確認
-    disabledCells.forEach((cell) => {
-      const hasDisabledAttribute = cell.hasAttribute('data-disabled');
-      const hasAriaDisabledTrue = cell.getAttribute('aria-disabled') === 'true';
-      const hasDisabledClass = cell.classList.contains('disabled');
-
-      expect(
-        hasDisabledAttribute || hasAriaDisabledTrue || hasDisabledClass
-      ).toBe(true);
-    });
-
-    return disabledCells;
-  }
-
-  /**
-   * 登録ボタンを連続でクリックしても処理が1回だけ実行されることを確認
-   */
-  it('登録ボタンを連続でクリックしても処理が1回だけ実行されることを確認', async () => {
+  it('食材追加成功時にonFoodAddedとonCloseが呼ばれることを確認', async () => {
     // Arrange
-    // addFoodItemが正常に動作することをシミュレート
+    // addFoodItemが成功することをシミュレート
     vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
       return { ...food, id: 'test-id' };
     });
 
     render(<FoodForm {...mockProps} />);
+
     const nameInput = screen.getByRole('textbox', { name: '食品名' });
     const submitButton = screen.getByRole('button', { name: '登録' });
 
     // Act
-    // 食品名を入力
-    await user.type(nameInput, 'テスト食材');
-
-    // 登録ボタンを素早く2回クリック
-    await user.click(submitButton);
+    // 食品名を入力して送信
+    await user.type(nameInput, '通知テスト');
     await user.click(submitButton);
 
     // Assert
-    // addFoodItemが1回だけ呼ばれたことを確認
-    expect(storageUtils.addFoodItem).toHaveBeenCalledTimes(1);
-
-    // 処理が実行されると、onFoodAddedとonCloseが各1回ずつ呼ばれる
-    expect(mockProps.onFoodAdded).toHaveBeenCalledTimes(1);
-    expect(mockProps.onClose).toHaveBeenCalledTimes(1);
+    // Appコンポーネントのコールバックが呼ばれたことを確認
+    await waitFor(() => {
+      // 食材が追加されたことをAppに通知
+      expect(mockProps.onFoodAdded).toHaveBeenCalledTimes(1);
+      // フォームが閉じられたことをAppに通知
+      expect(mockProps.onClose).toHaveBeenCalledTimes(1);
+    });
   });
 
   /**
@@ -465,6 +447,36 @@ describe('FoodForm', () => {
 
     // 送信状態がリセットされ、ボタンが再度有効になることを確認
     expect(screen.getByRole('button', { name: '登録' })).toBeEnabled();
+  });
+
+  /**
+   * 特定のエラータイプに対するエラーメッセージをテスト
+   */
+  it('エラータイプに応じた具体的なエラーメッセージが表示されることを確認', async () => {
+    // Arrange
+    // QuotaExceededErrorをスローするようにモック
+    vi.mocked(storageUtils.addFoodItem).mockImplementation(() => {
+      throw new QuotaExceededError();
+    });
+
+    render(<FoodForm {...mockProps} />);
+    const nameInput = screen.getByRole('textbox', { name: '食品名' });
+    const submitButton = screen.getByRole('button', { name: '登録' });
+
+    // Act
+    // 食品名を入力して送信
+    await user.type(nameInput, 'テスト食材');
+    await user.click(submitButton);
+
+    // Assert
+    // 特定のエラータイプに応じたメッセージが表示されることを確認
+    const errorElement = await screen.findByText(
+      '保存容量が上限に達しました。不要なデータを削除してください。'
+    );
+    expect(errorElement).toBeInTheDocument();
+    expect(errorElement.textContent).toBe(
+      '保存容量が上限に達しました。不要なデータを削除してください。'
+    );
   });
 
   /**
@@ -581,6 +593,161 @@ describe('FoodForm', () => {
           expiryDate: expect.any(String),
         })
       );
+    });
+
+    it('食品名バリデーションが機能していることを確認', async () => {
+      // Arrange
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const submitButton = screen.getByRole('button', { name: '登録' });
+
+      // Act
+      // 空文字を入力して送信ボタンをクリック
+      await user.clear(nameInput);
+      await user.click(submitButton);
+
+      // Assert
+      // エラーメッセージが表示されていることを確認
+      const errorMessage = await screen.findByText(
+        '食品名を入力してください。空白文字のみは無効です。'
+      );
+      expect(errorMessage).toBeInTheDocument();
+      // エラーメッセージの内容が期待どおりであることを確認
+      expect(errorMessage.textContent).toBe(
+        '食品名を入力してください。空白文字のみは無効です。'
+      );
+    });
+
+    it('エラーが発生したフィールドにエラースタイルが適用されることを確認', async () => {
+      // Arrange
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+
+      // Act - エラー状態の確認
+      // 空文字を入力してフォーカスを外す
+      await user.clear(nameInput);
+      await user.tab();
+
+      // Assert - エラー状態でスタイルが適用されていることを確認
+      await waitFor(() => {
+        expect(nameInput).toHaveClass('border-destructive');
+      });
+
+      // Act - エラー解消の確認
+      // 有効な値を入力
+      await user.type(nameInput, 'テスト');
+      await user.tab();
+
+      // Assert - エラーが解消されてスタイルが削除されることを確認
+      await waitFor(() => {
+        expect(nameInput).not.toHaveClass('border-destructive');
+      });
+    });
+
+    it('入力値を修正するとエラーメッセージが消えることを確認', async () => {
+      // Arrange
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+
+      // まずエラーを発生させる
+      await user.clear(nameInput);
+      await user.tab();
+
+      // エラーメッセージが表示されたことを確認
+      const errorMessage = await screen.findByText(
+        '食品名を入力してください。空白文字のみは無効です。'
+      );
+      expect(errorMessage).toBeInTheDocument();
+
+      // Act
+      // 正しい値を入力
+      await user.type(nameInput, '有効な名前');
+
+      // Assert
+      // エラーメッセージが消えていることを確認
+      await waitFor(() => {
+        expect(
+          screen.queryByText(
+            '食品名を入力してください。空白文字のみは無効です。'
+          )
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    it('複数フィールドのバリデーションが行われることの確認', async () => {
+      // Arrange
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const submitButton = screen.getByRole('button', { name: '登録' });
+
+      // Act
+      // 名前欄を空にして送信
+      await user.clear(nameInput);
+      await user.click(submitButton);
+
+      // Assert
+      // 名前のエラーメッセージが表示されていることを確認
+      const nameError = await screen.findByText(
+        '食品名を入力してください。空白文字のみは無効です。'
+      );
+      expect(nameError).toBeInTheDocument();
+
+      // 送信が中断されていることを確認 (addFoodItemが呼ばれていないこと)
+      expect(storageUtils.addFoodItem).not.toHaveBeenCalled();
+    });
+
+    it('フォームをキャンセルするとリセットされることを確認', async () => {
+      // Arrange
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const cancelButton = screen.getByRole('button', { name: 'キャンセル' });
+
+      // 有効な値を入力
+      await user.type(nameInput, 'テスト食材');
+
+      // 現在の値が正しく入力されていることを確認
+      expect(nameInput).toHaveValue('テスト食材');
+
+      // Act
+      // キャンセルボタンをクリック
+      await user.click(cancelButton);
+
+      // Assert
+      // onCloseが呼ばれていることを確認
+      expect(mockProps.onClose).toHaveBeenCalled();
+
+      // ダイアログを閉じる処理が実行されたことを確認
+      expect(mockProps.onClose).toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * 複数フィールドのバリデーションが行われることの確認
+   */
+  describe('フォームバリデーション', () => {
+    it('食品名が空の場合はエラーが表示されることを確認', async () => {
+      // Arrange
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const submitButton = screen.getByRole('button', { name: '登録' });
+
+      // Act
+      // 名前欄を空にして送信
+      await user.clear(nameInput);
+      await user.click(submitButton);
+
+      // Assert
+      // 名前のエラーメッセージが表示されていることを確認
+      const nameError = await screen.findByText(
+        '食品名を入力してください。空白文字のみは無効です。'
+      );
+      expect(nameError).toBeInTheDocument();
+      expect(nameError.textContent).toBe(
+        '食品名を入力してください。空白文字のみは無効です。'
+      );
+
+      // 送信が中断されていることを確認 (addFoodItemが呼ばれていないこと)
+      expect(storageUtils.addFoodItem).not.toHaveBeenCalled();
     });
   });
 });

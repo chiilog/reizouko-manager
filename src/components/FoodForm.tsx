@@ -30,7 +30,14 @@ import {
   MAX_NAME_LENGTH,
   sanitizeHtmlTags,
   validateFoodName,
+  validateExpiryDate,
 } from '@/lib/validation';
+import {
+  QuotaExceededError,
+  NetworkError,
+  ValidationError,
+  StorageError,
+} from '@/lib/errors';
 
 interface FoodFormProps {
   /**
@@ -60,6 +67,15 @@ interface FoodFormProps {
 }
 
 /**
+ * フォームエラーの型定義
+ */
+type FormErrors = {
+  name?: string;
+  expiryDate?: string;
+  systemError?: string; // システム処理に関するエラー
+};
+
+/**
  * 食材入力用のフォームコンポーネント
  */
 export function FoodForm({
@@ -73,7 +89,7 @@ export function FoodForm({
   const [date, setDate] = useState<Date>(getDateAfterDays(5));
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [internalIsSubmitting, setInternalIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<FormErrors>({});
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   /**
@@ -103,7 +119,56 @@ export function FoodForm({
   const resetForm = () => {
     setName('');
     setDate(getDateAfterDays(5));
-    setError(null);
+    setErrors({});
+  };
+
+  /**
+   * 名前の入力値変更時の処理
+   */
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setName(e.target.value);
+    // 対応するエラーをクリア
+    if (errors.name) {
+      setErrors((prev) => ({ ...prev, name: undefined }));
+    }
+  };
+
+  /**
+   * 日付の変更時の処理
+   */
+  const handleDateChange = (newDate: Date | undefined) => {
+    if (newDate) {
+      setDate(newDate);
+      setCalendarOpen(false);
+      // 対応するエラーをクリア
+      if (errors.expiryDate) {
+        setErrors((prev) => ({ ...prev, expiryDate: undefined }));
+      }
+    }
+  };
+
+  /**
+   * 名前入力欄のブラー時の処理
+   */
+  const handleNameBlur = () => {
+    const nameError = validateFoodName(name);
+    if (nameError) {
+      setErrors((prev) => ({ ...prev, name: nameError }));
+    } else if (errors.name) {
+      setErrors((prev) => ({ ...prev, name: undefined }));
+    }
+  };
+
+  /**
+   * 日付選択のブラー時の処理
+   */
+  const handleDateBlur = () => {
+    const dateError = validateExpiryDate(date);
+    if (dateError) {
+      setErrors((prev) => ({ ...prev, expiryDate: dateError }));
+    } else if (errors.expiryDate) {
+      setErrors((prev) => ({ ...prev, expiryDate: undefined }));
+    }
   };
 
   /**
@@ -112,16 +177,26 @@ export function FoodForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // 名前を検証
-    const validationError = validateFoodName(name);
-    if (validationError) {
-      setError(validationError);
-      nameInputRef.current?.focus();
+    // 全フィールドの検証
+    const nameError = validateFoodName(name);
+    const dateError = validateExpiryDate(date);
+
+    const newErrors: FormErrors = {};
+    if (nameError) newErrors.name = nameError;
+    if (dateError) newErrors.expiryDate = dateError;
+
+    // エラーがある場合は処理を中断
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      // 最初のエラーフィールドにフォーカス
+      if (newErrors.name) {
+        nameInputRef.current?.focus();
+      }
       return;
     }
 
     // エラーをリセット
-    setError(null);
+    setErrors({});
 
     // 既に送信中の場合は処理を中断
     if (isSubmitting) return;
@@ -146,16 +221,42 @@ export function FoodForm({
     } catch (error) {
       // エラーが発生した場合、エラーメッセージを設定
       console.error('食材の追加に失敗しました', error);
-      // ユーザーにはシンプルなメッセージを表示
-      setError('食材の追加に失敗しました。もう一度お試しください。');
+      // ユーザーにはエラーの種類に応じたメッセージを表示
+      let systemError = '食材の追加に失敗しました。もう一度お試しください。';
+      if (error instanceof QuotaExceededError) {
+        systemError =
+          '保存容量が上限に達しました。不要なデータを削除してください。';
+      } else if (error instanceof NetworkError) {
+        systemError =
+          'ネットワーク接続に問題があります。接続を確認し、もう一度お試しください。';
+      } else if (error instanceof ValidationError) {
+        systemError =
+          '入力内容に問題があります。内容を確認し、もう一度お試しください。';
+      } else if (error instanceof StorageError) {
+        systemError =
+          'データの保存中にエラーが発生しました。ブラウザの設定を確認し、もう一度お試しください。';
+      }
+      setErrors({
+        systemError: systemError,
+      });
     } finally {
       // 処理完了時に送信中フラグをOFFに
       updateSubmittingState(false);
     }
   };
 
+  /**
+   * ダイアログが閉じる時の処理
+   */
+  const handleDialogClose = (open: boolean) => {
+    if (!open) {
+      resetForm();
+      onClose();
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={handleDialogClose}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>食材の登録</DialogTitle>
@@ -175,17 +276,22 @@ export function FoodForm({
                 ref={nameInputRef}
                 placeholder="例：きゅうり、たまご"
                 value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                }}
-                onBlur={(e) => {
-                  const validationError = validateFoodName(e.target.value);
-                  setError(validationError);
-                }}
+                onChange={handleNameChange}
+                onBlur={handleNameBlur}
                 maxLength={MAX_NAME_LENGTH}
                 required
-                aria-describedby={error ? 'name-error' : undefined}
+                className={cn(errors.name && 'border-destructive')}
+                aria-describedby={errors.name ? 'name-error' : undefined}
               />
+              {errors.name && (
+                <div
+                  id="name-error"
+                  aria-live="assertive"
+                  className="text-sm text-destructive mt-1"
+                >
+                  {errors.name}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -197,8 +303,13 @@ export function FoodForm({
                     variant="outline"
                     className={cn(
                       'w-full pl-3 text-left font-normal',
-                      !date && 'text-muted-foreground'
+                      !date && 'text-muted-foreground',
+                      errors.expiryDate && 'border-destructive'
                     )}
+                    aria-describedby={
+                      errors.expiryDate ? 'expiry-date-error' : undefined
+                    }
+                    onBlur={handleDateBlur}
                   >
                     {date ? formatDateToJapanese(date) : '日付を選択'}
                   </Button>
@@ -207,26 +318,30 @@ export function FoodForm({
                   <Calendar
                     mode="single"
                     selected={date}
-                    onSelect={(date) => {
-                      if (date) {
-                        setDate(date);
-                        setCalendarOpen(false);
-                      }
-                    }}
+                    onSelect={handleDateChange}
                     disabled={{ before: new Date() }}
                   />
                 </PopoverContent>
               </Popover>
+              {errors.expiryDate && (
+                <div
+                  id="expiry-date-error"
+                  aria-live="assertive"
+                  className="text-sm text-destructive mt-1"
+                >
+                  {errors.expiryDate}
+                </div>
+              )}
             </div>
 
-            {/* エラーメッセージ表示エリア */}
-            {error && (
+            {/* システムエラーメッセージ表示エリア */}
+            {errors.systemError && (
               <div
-                id="name-error"
+                id="system-error"
                 aria-live="assertive"
                 className="rounded-md bg-destructive/10 p-3 text-sm text-destructive"
               >
-                {error}
+                {errors.systemError}
               </div>
             )}
           </div>
