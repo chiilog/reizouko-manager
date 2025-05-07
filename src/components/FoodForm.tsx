@@ -1,8 +1,7 @@
 /**
  * 食材入力用のフォームコンポーネント
  */
-import { useRef, useState } from 'react';
-import { Calendar } from '@/components/ui/calendar';
+import { useRef, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -13,17 +12,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
+import { CustomDatePicker } from '@/components/CustomDatePicker';
 import { cn } from '@/lib/utils';
-import {
-  formatDateToISOString,
-  formatDateToJapanese,
-  getDateAfterDays,
-} from '@/lib/date-utils';
+import { formatDateToISOString, getDateAfterDays } from '@/lib/date-utils';
 import { addFoodItem } from '@/lib/storage';
 import { Loader2 } from 'lucide-react';
 import {
@@ -75,6 +66,8 @@ type FormErrors = {
   systemError?: string; // システム処理に関するエラー
 };
 
+const DEFAULT_EXPIRY_DATE_DAYS = 5;
+
 /**
  * 食材入力用のフォームコンポーネント
  */
@@ -86,8 +79,9 @@ export function FoodForm({
   onSubmittingChange,
 }: FoodFormProps) {
   const [name, setName] = useState('');
-  const [date, setDate] = useState<Date>(getDateAfterDays(5));
-  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [expiryDate, setExpiryDate] = useState<Date | undefined>(
+    getDateAfterDays(DEFAULT_EXPIRY_DATE_DAYS)
+  );
   const [internalIsSubmitting, setInternalIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -114,13 +108,15 @@ export function FoodForm({
   };
 
   /**
-   * フォームをリセットする
+   * ダイアログが開かれたときにフォームの初期値を設定
    */
-  const resetForm = () => {
-    setName('');
-    setDate(getDateAfterDays(5));
-    setErrors({});
-  };
+  useEffect(() => {
+    if (open) {
+      setName('');
+      setExpiryDate(getDateAfterDays(DEFAULT_EXPIRY_DATE_DAYS));
+      setErrors({});
+    }
+  }, [open]);
 
   /**
    * 名前の入力値変更時の処理
@@ -134,16 +130,17 @@ export function FoodForm({
   };
 
   /**
-   * 日付の変更時の処理
+   * 日付の変更時の処理 (CustomDatePickerからのコールバック)
    */
-  const handleDateChange = (newDate: Date | undefined) => {
-    if (newDate) {
-      setDate(newDate);
-      setCalendarOpen(false);
-      // 対応するエラーをクリア
-      if (errors.expiryDate) {
-        setErrors((prev) => ({ ...prev, expiryDate: undefined }));
-      }
+  const handleExpiryDateChange = (newDate: Date | undefined) => {
+    setExpiryDate(newDate);
+    // 対応するエラーをクリア
+    if (errors.expiryDate) {
+      setErrors((prev) => ({ ...prev, expiryDate: undefined }));
+    }
+    // 日付が選択されたら、システムエラーもクリアする (UX向上のため)
+    if (errors.systemError) {
+      setErrors((prev) => ({ ...prev, systemError: undefined }));
     }
   };
 
@@ -155,35 +152,29 @@ export function FoodForm({
     if (nameError) {
       setErrors((prev) => ({ ...prev, name: nameError }));
     } else if (errors.name) {
+      // エラーがない場合は、エラーメッセージをクリア
       setErrors((prev) => ({ ...prev, name: undefined }));
-    }
-  };
-
-  /**
-   * 日付選択のブラー時の処理
-   */
-  const handleDateBlur = () => {
-    const dateError = validateExpiryDate(date);
-    if (dateError) {
-      setErrors((prev) => ({ ...prev, expiryDate: dateError }));
-    } else if (errors.expiryDate) {
-      setErrors((prev) => ({ ...prev, expiryDate: undefined }));
     }
   };
 
   /**
    * フォーム送信時の処理
    */
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // 全フィールドの検証
     const nameError = validateFoodName(name);
-    const dateError = validateExpiryDate(date);
+    const dateError = expiryDate
+      ? validateExpiryDate(expiryDate)
+      : '日付を選択してください。'; // expiryDateがundefinedの場合のエラーメッセージ
 
     const newErrors: FormErrors = {};
     if (nameError) newErrors.name = nameError;
-    if (dateError) newErrors.expiryDate = dateError;
+    if (!expiryDate || dateError !== null) {
+      // expiryDateが未選択、またはvalidateExpiryDateがエラーメッセージを返した場合
+      newErrors.expiryDate = dateError || '日付を選択してください。';
+    }
 
     // エラーがある場合は処理を中断
     if (Object.keys(newErrors).length > 0) {
@@ -191,6 +182,8 @@ export function FoodForm({
       // 最初のエラーフィールドにフォーカス
       if (newErrors.name) {
         nameInputRef.current?.focus();
+      } else if (newErrors.expiryDate) {
+        // CustomDatePickerには直接フォーカスできないため、UI上の工夫が必要な場合がある
       }
       return;
     }
@@ -208,16 +201,19 @@ export function FoodForm({
     const sanitizedName = sanitizeHtmlTags(name.trim());
 
     try {
-      // 食材の追加
+      // 食材の追加 (expiryDateがundefinedでないことは上でチェック済みのはずだが念のため)
+      if (!expiryDate) {
+        // このケースは通常発生しないはずだが、型安全のため
+        throw new ValidationError('賞味期限が設定されていません。');
+      }
       addFoodItem({
         name: sanitizedName,
-        expiryDate: formatDateToISOString(date),
+        expiryDate: formatDateToISOString(expiryDate),
       });
 
       // 親コンポーネントに通知
       onFoodAdded();
-      resetForm();
-      onClose();
+      onClose(); // ダイアログを閉じる
     } catch (error) {
       // エラーが発生した場合、エラーメッセージを設定
       console.error('食材の追加に失敗しました', error);
@@ -230,8 +226,7 @@ export function FoodForm({
         systemError =
           'ネットワーク接続に問題があります。接続を確認し、もう一度お試しください。';
       } else if (error instanceof ValidationError) {
-        systemError =
-          '入力内容に問題があります。内容を確認し、もう一度お試しください。';
+        systemError = error.message; // バリデーションエラーのメッセージをそのまま表示
       } else if (error instanceof StorageError) {
         systemError =
           'データの保存中にエラーが発生しました。ブラウザの設定を確認し、もう一度お試しください。';
@@ -246,108 +241,82 @@ export function FoodForm({
   };
 
   /**
-   * ダイアログが閉じる時の処理
+   * ダイアログが閉じる時の処理（Formのキャンセルアクションにも使用）
    */
-  const handleDialogClose = (open: boolean) => {
-    if (!open) {
-      resetForm();
-      onClose();
-    }
+  const handleCloseDialog = () => {
+    onClose(); // onCloseを呼び出してダイアログを閉じる
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleDialogClose}>
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => !isOpen && handleCloseDialog()}
+    >
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>食材の登録</DialogTitle>
           <DialogDescription>
-            食材の名前と賞味期限を入力してください。
+            新しい食材の情報を入力してください。
           </DialogDescription>
         </DialogHeader>
-
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <label htmlFor="food-name" className="text-sm font-medium">
-                食品名
-              </label>
-              <Input
-                id="food-name"
-                ref={nameInputRef}
-                placeholder="例：きゅうり、たまご"
-                value={name}
-                onChange={handleNameChange}
-                onBlur={handleNameBlur}
-                maxLength={MAX_NAME_LENGTH}
-                required
-                className={cn(errors.name && 'border-destructive')}
-                aria-describedby={errors.name ? 'name-error' : undefined}
-              />
-              {errors.name && (
-                <div
-                  id="name-error"
-                  aria-live="assertive"
-                  className="text-sm text-destructive mt-1"
-                >
-                  {errors.name}
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">賞味期限</label>
-              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={cn(
-                      'w-full pl-3 text-left font-normal',
-                      !date && 'text-muted-foreground',
-                      errors.expiryDate && 'border-destructive'
-                    )}
-                    aria-describedby={
-                      errors.expiryDate ? 'expiry-date-error' : undefined
-                    }
-                    onBlur={handleDateBlur}
-                  >
-                    {date ? formatDateToJapanese(date) : '日付を選択'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={date}
-                    onSelect={handleDateChange}
-                    disabled={{ before: new Date() }}
-                  />
-                </PopoverContent>
-              </Popover>
-              {errors.expiryDate && (
-                <div
-                  id="expiry-date-error"
-                  aria-live="assertive"
-                  className="text-sm text-destructive mt-1"
-                >
-                  {errors.expiryDate}
-                </div>
-              )}
-            </div>
-
-            {/* システムエラーメッセージ表示エリア */}
-            {errors.systemError && (
-              <div
-                id="system-error"
-                aria-live="assertive"
-                className="rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+        <form onSubmit={handleSubmit} className="grid gap-4 py-4">
+          <div className="grid grid-cols-4 items-center gap-4">
+            <label htmlFor="name" className="text-right whitespace-nowrap">
+              食品名
+            </label>
+            <Input
+              id="name"
+              ref={nameInputRef}
+              value={name}
+              onChange={handleNameChange}
+              onBlur={handleNameBlur} // ブラー時にもバリデーションを実行
+              placeholder="例：きゅうり、たまご"
+              className={cn('col-span-3', errors.name && 'border-destructive')}
+              maxLength={MAX_NAME_LENGTH + 10} // 少し余裕を持たせる (バリデーションはMAX_NAME_LENGTHで)
+              aria-invalid={!!errors.name}
+              aria-describedby={errors.name ? 'name-error' : undefined}
+            />
+            {errors.name && (
+              <p
+                id="name-error"
+                className="col-span-4 text-sm text-destructive text-right"
               >
-                {errors.systemError}
-              </div>
+                {errors.name}
+              </p>
             )}
           </div>
-
+          <div className="grid grid-cols-4 items-center gap-4">
+            <label htmlFor="expiryDate" className="text-right">
+              賞味期限
+            </label>
+            <div className="col-span-3">
+              <CustomDatePicker
+                selectedDate={expiryDate}
+                onDateChange={handleExpiryDateChange}
+                initialDate={getDateAfterDays(DEFAULT_EXPIRY_DATE_DAYS)}
+                minDate={new Date()} // 今日以降を選択可能に
+                placeholder="賞味期限を選択"
+                className={cn(errors.expiryDate && 'border-destructive')} // isError propも使える
+                isError={!!errors.expiryDate} // CustomDatePickerにエラー状態を伝える
+                // buttonVariant={errors.expiryDate ? 'destructive' : 'outline'} // 直接variantを変えることも可能
+              />
+            </div>
+            {errors.expiryDate && (
+              <p
+                id="expiryDate-error"
+                className="col-span-4 text-sm text-destructive text-right"
+              >
+                {errors.expiryDate}
+              </p>
+            )}
+          </div>
+          {errors.systemError && (
+            <p className="col-span-4 text-sm text-destructive text-center">
+              {errors.systemError}
+            </p>
+          )}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={handleCloseDialog}>
               キャンセル
             </Button>
             <Button type="submit" disabled={isSubmitting}>
