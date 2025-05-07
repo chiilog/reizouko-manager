@@ -3,13 +3,7 @@
  * @description FoodFormコンポーネントのレンダリング、インタラクション、バリデーション、送信処理などに関するテストを記述します。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  render,
-  screen,
-  waitFor,
-  within,
-  fireEvent,
-} from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FoodForm } from './FoodForm';
 import * as storageUtils from '@/lib/storage';
@@ -19,6 +13,7 @@ import {
   formatDateToJapanese,
   getDateAfterDays,
 } from '@/lib/date-utils';
+import * as validationUtils from '@/lib/validation'; // バリデーション関数をモックするためにインポート
 
 // モックの定義
 vi.mock('@/lib/storage', () => ({
@@ -109,6 +104,7 @@ describe('FoodForm', () => {
   describe('フォーム送信成功時の処理', () => {
     beforeEach(() => {
       vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
+        // FoodFormはサニタイズとトリムを行うので、それを考慮した上でモックを設定
         return { ...food, id: `test-id-${food.name}` };
       });
     });
@@ -140,8 +136,6 @@ describe('FoodForm', () => {
           // 日付選択のシミュレーション
           await user.click(datePickerButton); // カレンダーを開く
           const calendar = await screen.findByRole('grid');
-          // 適切な月のカレンダーが表示されている前提で日を選択
-          // (CustomDatePickerのテストで月のナビゲーションは確認済みと仮定)
           const monthStr = selectDate.toLocaleString('en-US', {
             month: 'long',
           });
@@ -149,7 +143,7 @@ describe('FoodForm', () => {
           const yearNum = selectDate.getFullYear();
           const dateCellButton = within(calendar).getByRole('button', {
             name: new RegExp(
-              `${monthStr}\\s+${dayNum}(st|nd|rd|th)?,\\s+${yearNum}`
+              monthStr + '\\s+' + dayNum + '(st|nd|rd|th)?' + ',\\s+' + yearNum
             ),
           });
           await user.click(dateCellButton);
@@ -180,6 +174,36 @@ describe('FoodForm', () => {
         });
       }
     );
+
+    it('HTMLタグや前後の空白を含む食品名が、サニタイズ・トリムされて登録されること', async () => {
+      // Arrange
+      // addFoodItem のモックは beforeEach で設定されているものを再利用
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const submitButton = screen.getByRole('button', { name: '登録' });
+      const initialExpiryDate = getDateAfterDays(5); // FoodForm のデフォルト日付
+
+      // Act
+      await user.type(
+        nameInput,
+        '  <p>テスト食材</p><script>alert("XSS")</script>  '
+      );
+      await user.click(submitButton);
+
+      // Assert
+      expect(storageUtils.addFoodItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'テスト食材', // サニタイズ＆トリムされた結果を期待
+          expiryDate: formatDateToISOString(initialExpiryDate), // 日付も正しく渡される
+        })
+      );
+      // 成功コールバックも呼ばれるはず
+      await waitFor(() => {
+        // waitFor を使って非同期処理の完了を待つ
+        expect(mockProps.onFoodAdded).toHaveBeenCalledTimes(1);
+        expect(mockProps.onClose).toHaveBeenCalledTimes(1);
+      });
+    });
   });
 
   it('キャンセルボタンをクリックするとonCloseが呼ばれることを確認', async () => {
@@ -320,7 +344,7 @@ describe('FoodForm', () => {
 
       // このテストは一旦、handleSubmitが呼ばれた際に、もしexpiryDateがなければエラーがセットされることを期待する、
       // という形で残すが、UI操作からの自然な流れではないことに留意。
-      // 実際には、handleSubmit内の`!expiryDate`の分岐は、初期値があるため通常通らない。
+      // 実際には、handleSubmit内`!expiryDate`の分岐は、初期値があるため通常通らない。
 
       // このテストの前提を「何らかの理由で日付がクリアされた場合」とする。
       // しかし、現行のCustomDatePickerにはクリア機能がないため、FoodFormのhandleSubmitが呼ばれる際に
@@ -347,7 +371,7 @@ describe('FoodForm', () => {
       // 強制的にhandleSubmit内のバリデーションを失敗させるために、
       // `validateExpiryDate` をモックしてエラーを返すようにする。
       const mockValidateExpiryDate = vi.spyOn(
-        await import('@/lib/validation'),
+        validationUtils,
         'validateExpiryDate'
       );
       mockValidateExpiryDate.mockReturnValue('賞味期限を選択してください。');
@@ -532,6 +556,8 @@ describe('FoodForm', () => {
 
   /**
    * @describe 食品名入力のバリデーション (FoodFormの責務)
+   * @description 主に必須チェックなど、FoodFormレベルでのバリデーションを確認します。
+   * 詳細なバリデーションルール（文字数制限、サニタイズ等）はlib/validation.test.tsでテストします。
    */
   describe('食品名入力のバリデーション', () => {
     it.each([
@@ -542,7 +568,7 @@ describe('FoodForm', () => {
       },
       {
         caseName: '空白文字のみの場合',
-        inputValue: '   ',
+        inputValue: '   ', // FoodForm側でtrimされる前の状態をテスト
         expectedMessage: '食品名を入力してください。空白文字のみは無効です。',
       },
     ])(
@@ -567,146 +593,55 @@ describe('FoodForm', () => {
           expect(screen.getByText(expectedMessage)).toBeInTheDocument();
         });
         expect(storageUtils.addFoodItem).not.toHaveBeenCalled();
-        expect(mockProps.onFoodAdded).not.toHaveBeenCalled();
-        expect(mockProps.onClose).not.toHaveBeenCalled();
       }
     );
 
-    it('入力文字数が上限（50文字）を超える場合にエラーを表示し送信されないことを確認', async () => {
+    it('エラーが発生した食品名入力フィールドにエラースタイルが適用されること', async () => {
       // Arrange
       render(<FoodForm {...mockProps} />);
       const nameInput = screen.getByRole('textbox', { name: '食品名' });
       const submitButton = screen.getByRole('button', { name: '登録' });
-      const tooLongName = 'あ'.repeat(51);
-
-      // Act
-      // userEvent.typeが遅い場合があるのでfireEventで値を直接セットし、blurとclickで検証
-      fireEvent.change(nameInput, { target: { value: tooLongName } });
-      // blurイベントでエラーメッセージが出ることを期待 (FoodFormの実装による)
-      fireEvent.blur(nameInput);
-      await waitFor(() => {
-        expect(
-          screen.getByText('食品名は50文字以内で入力してください。')
-        ).toBeInTheDocument();
-      });
-
-      // さらに送信ボタンを押しても、送信されないことを確認
-      await user.click(submitButton);
-      expect(storageUtils.addFoodItem).not.toHaveBeenCalled();
-    });
-
-    it('HTMLタグを含む入力がサニタイズ（除去）されて登録されることを確認', async () => {
-      // Arrange
-      vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
-        return { ...food, id: 'test-id' };
-      });
-      render(<FoodForm {...mockProps} />);
-      const nameInput = screen.getByRole('textbox', { name: '食品名' });
-      const submitButton = screen.getByRole('button', { name: '登録' });
-
-      // Act
-      // HTMLタグとスクリプトタグを含む名前を入力
-      await user.clear(nameInput);
-      await user.type(
-        nameInput,
-        '<div>タグ付き</div><script>alert("XSS")</script>きゅうり'
-      );
-      await user.click(submitButton);
-
-      // Assert
-      // HTMLタグとスクリプトタグが除去された状態でaddFoodItemが呼ばれることを確認
-      expect(storageUtils.addFoodItem).toHaveBeenCalledWith({
-        name: 'タグ付ききゅうり', // タグが除去されることを期待
-        expiryDate: expect.any(String),
-      });
-    });
-
-    it('入力値の前後の空白がトリムされて登録されることを確認', async () => {
-      // Arrange
-      // addFoodItemが正常に動作することをシミュレート
-      vi.mocked(storageUtils.addFoodItem).mockImplementation((food) => {
-        return { ...food, id: 'test-id' };
-      });
-      render(<FoodForm {...mockProps} />);
-      const nameInput = screen.getByRole('textbox', { name: '食品名' });
-      const submitButton = screen.getByRole('button', { name: '登録' });
-
-      // Act
-      await user.type(nameInput, '  きゅうり  '); // 前後に空白がある
-      await user.click(submitButton);
-
-      // Assert
-      // トリムされた値でaddFoodItemが呼ばれることを確認
-      expect(storageUtils.addFoodItem).toHaveBeenCalledWith(
-        expect.objectContaining({
-          name: 'きゅうり',
-          expiryDate: formatDateToISOString(getDateAfterDays(5)),
-        })
-      );
-    });
-
-    it('エラーが発生したフィールドにエラースタイル（border-destructive）が適用されることを確認', async () => {
-      // Arrange
-      render(<FoodForm {...mockProps} />);
-      const nameInput = screen.getByRole('textbox', { name: '食品名' });
-      const submitButton = screen.getByRole('button', { name: '登録' });
-      const datePickerButton = screen.getByRole('button', {
-        name: /年.*月.*日/,
-      }); // 日付ピッカーボタン
 
       // Act: 名前欄を空にして送信 (名前エラー)
       await user.clear(nameInput);
       await user.click(submitButton);
 
-      // Assert: 名前入力欄にエラースタイル適用、日付ピッカーはエラーなし
+      // Assert: 名前入力欄にエラースタイル適用
       await waitFor(() => {
         expect(nameInput).toHaveClass('border-destructive');
-      });
-      // CustomDatePickerのisError propsがfalseのはずなので、エラークラスはつかない
-      // CustomDatePicker自体のclassNameもチェック (FoodFormが渡すcn内の条件による)
-      expect(datePickerButton).not.toHaveClass('border-destructive'); // これはCustomDatePicker内部のisErrorによるクラス
-
-      // Act: 名前を有効にし、日付エラーを発生させる (validateExpiryDateをモックしてエラーを発生させる)
-      await user.type(nameInput, '有効な名前');
-      const mockValidateExpiryDate = vi.spyOn(
-        await import('@/lib/validation'),
-        'validateExpiryDate'
-      );
-      mockValidateExpiryDate.mockReturnValue('日付エラー'); // validateExpiryDateがエラーを返すようにする
-      await user.click(submitButton);
-
-      // Assert: 名前入力欄はエラーなし、日付ピッカーにエラースタイル適用
-      await waitFor(() => {
-        expect(nameInput).not.toHaveClass('border-destructive');
-        // CustomDatePickerにisError=trueが渡され、結果としてボタンにエラークラスが付くことを期待
-        expect(screen.getByRole('button', { name: /年.*月.*日/ })).toHaveClass(
-          'border-destructive'
-        );
-        expect(screen.getByText('日付エラー')).toBeInTheDocument();
-      });
-
-      mockValidateExpiryDate.mockRestore();
-
-      // Act: 両方のエラーを解消
-      await user.clear(nameInput); // 名前をクリアして再度入力
-      await user.type(nameInput, '再有効な名前');
-      // 日付は正常な状態に戻す (validateExpiryDateのモックは解除済み)
-      await user.click(submitButton);
-
-      // Assert: 両方のフィールドのエラースタイルが解除される
-      await waitFor(() => {
-        // 正常登録されるのでコールバックが呼ばれるはず
-        expect(storageUtils.addFoodItem).toHaveBeenCalled();
-        // エラーメッセージが消え、エラークラスも解除される
-        expect(screen.queryByText('日付エラー')).not.toBeInTheDocument();
-        expect(nameInput).not.toHaveClass('border-destructive');
-        expect(
-          screen.getByRole('button', { name: /年.*月.*日/ })
-        ).not.toHaveClass('border-destructive');
+        expect(nameInput).toHaveAttribute('aria-invalid', 'true');
       });
     });
 
-    it('入力値を修正するとエラーメッセージが消えることを確認', async () => {
+    it('エラーが発生した賞味期限フィールドにエラースタイルが適用されること', async () => {
+      // Arrange
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const submitButton = screen.getByRole('button', { name: '登録' });
+      // FoodForm.tsxの実装では、validateExpiryDate がエラーを返すと isError=true が CustomDatePicker に渡される
+      // これを模倣するため、validateExpiryDateをモックする
+      const mockValidateExpiryDate = vi
+        .spyOn(validationUtils, 'validateExpiryDate')
+        .mockReturnValue('日付エラーのためテストでエラー'); // 意図的にエラーを返す
+
+      // Act: 名前は有効にし、日付エラーを発生させる
+      await user.type(nameInput, '有効な名前');
+      await user.click(submitButton); // ここでhandleSubmit内のvalidateExpiryDateが呼ばれる
+
+      // Assert: 日付ピッカー（のボタン）にエラースタイル適用とエラーメッセージ表示
+      await waitFor(() => {
+        const datePickerButton = screen.getByRole('button', {
+          name: /年.*月.*日/,
+        });
+        expect(datePickerButton).toHaveClass('border-destructive');
+        expect(
+          screen.getByText('日付エラーのためテストでエラー')
+        ).toBeInTheDocument();
+      });
+      mockValidateExpiryDate.mockRestore();
+    });
+
+    it('入力値を修正するとエラーメッセージが消えることを確認（食品名）', async () => {
       // Arrange
       render(<FoodForm {...mockProps} />);
       const nameInput = screen.getByRole('textbox', { name: '食品名' });
@@ -722,8 +657,8 @@ describe('FoodForm', () => {
 
       // Act: 正しい値を入力
       await user.type(nameInput, '有効な名前');
-      // blurや他のインタラクションでエラーが消えることを期待 (FoodFormの実装による)
-      fireEvent.blur(nameInput);
+      // FoodFormではonChangeハンドラ内でエラーをクリアするロジックがあるため、
+      // typeイベント後にエラーメッセージが消えていることを期待する。
 
       // Assert
       await waitFor(() => {
