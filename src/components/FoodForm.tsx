@@ -108,13 +108,20 @@ export function FoodForm({
   };
 
   /**
+   * フォームをリセットする処理
+   */
+  const resetForm = () => {
+    setName('');
+    setExpiryDate(getDateAfterDays(DEFAULT_EXPIRY_DATE_DAYS));
+    setErrors({});
+  };
+
+  /**
    * ダイアログが開かれたときにフォームの初期値を設定
    */
   useEffect(() => {
     if (open) {
-      setName('');
-      setExpiryDate(getDateAfterDays(DEFAULT_EXPIRY_DATE_DAYS));
-      setErrors({});
+      resetForm();
     }
   }, [open]);
 
@@ -241,6 +248,7 @@ export function FoodForm({
    * ダイアログが閉じる時の処理（Formのキャンセルアクションにも使用）
    */
   const handleCloseDialog = () => {
+    resetForm();
     onClose(); // onCloseを呼び出してダイアログを閉じる
   };
 
