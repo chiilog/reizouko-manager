@@ -30,7 +30,7 @@ import {
   StorageError,
 } from '@/lib/errors';
 
-interface FoodFormProps {
+export interface FoodFormProps {
   /**
    * ダイアログが開いているかどうか
    */
