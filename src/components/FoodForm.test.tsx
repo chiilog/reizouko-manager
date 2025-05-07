@@ -3,7 +3,8 @@
  * @description FoodFormコンポーネントのレンダリング、インタラクション、バリデーション、送信処理などに関するテストを記述します。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import type { MockInstance } from 'vitest';
+import { screen, waitFor, within } from '@testing-library/react';
 import { FoodForm } from './FoodForm';
 import * as storageUtils from '@/lib/storage';
 import { QuotaExceededError } from '@/lib/errors';
@@ -275,7 +276,7 @@ describe('FoodForm', () => {
   describe('送信状態の制御', () => {
     it('送信処理中は登録ボタンが無効化され「登録中...」と表示される (isSubmitting prop)', () => {
       // Arrange
-      render(<FoodForm {...mockProps} isSubmitting={true} />); // 外部からisSubmitting=trueを渡す
+      renderFoodForm({ ...mockProps, isSubmitting: true });
 
       // Assert
       const submitButton = screen.getByRole('button', { name: /登録中/ });
@@ -382,45 +383,73 @@ describe('FoodForm', () => {
     });
   });
 
-  // 食品名入力のバリデーションテスト
-  describe('食品名入力のバリデーション', () => {
+  // 入力フィールドのバリデーションとエラースタイル適用のテスト
+  describe('フォームのバリデーションとエラー表示', () => {
+    let mockValidateExpiryDate: MockInstance<
+      (date: Date | null) => string | null
+    > | null = null;
+
+    afterEach(() => {
+      // 各テストケース後にモックを確実にリストア
+      if (mockValidateExpiryDate) {
+        // 型アサーションを使用して安全に操作
+        (mockValidateExpiryDate as { mockRestore: () => void }).mockRestore();
+        mockValidateExpiryDate = null;
+      }
+    });
+
+    // 食品名の入力値バリデーションテスト（空/空白のみのケース）
     it.each([
       {
         caseName: '空文字の場合',
-        inputValue: '',
-        expectedMessage: '食品名を入力してください。空白文字のみは無効です。',
+        setupInput: async (
+          user: ReturnType<
+            typeof import('@testing-library/user-event').default.setup
+          >,
+          nameInput: HTMLElement
+        ) => {
+          await user.clear(nameInput);
+        },
+        expectedErrorMessage:
+          '食品名を入力してください。空白文字のみは無効です。',
       },
       {
         caseName: '空白文字のみの場合',
-        inputValue: '   ', // FoodForm側でtrimされる前の状態をテスト
-        expectedMessage: '食品名を入力してください。空白文字のみは無効です。',
+        setupInput: async (
+          user: ReturnType<
+            typeof import('@testing-library/user-event').default.setup
+          >,
+          nameInput: HTMLElement
+        ) => {
+          await user.clear(nameInput);
+          await user.type(nameInput, '   '); // 空白文字のみ
+        },
+        expectedErrorMessage:
+          '食品名を入力してください。空白文字のみは無効です。',
       },
     ])(
-      '$caseName、エラー「$expectedMessage」が表示され送信されないこと',
-      async ({ inputValue, expectedMessage }) => {
+      '食品名が$caseNameエラーメッセージが表示され送信されない',
+      async ({ setupInput, expectedErrorMessage }) => {
         // Arrange
         const { user, getByRole } = renderFoodForm(mockProps);
         const nameInput = getByRole('textbox', { name: '食品名' });
         const submitButton = getByRole('button', { name: '登録' });
+        vi.spyOn(storageUtils, 'addFoodItem');
 
-        // Act
-        if (inputValue) {
-          await user.type(nameInput, inputValue);
-        } else {
-          await user.clear(nameInput);
-        }
-        // 送信ボタンクリックでバリデーションがトリガーされる
+        // Act: 入力値を設定
+        await setupInput(user, nameInput);
         await user.click(submitButton);
 
-        // Assert
+        // Assert: エラーメッセージが表示される
         await waitFor(() => {
-          expect(screen.getByText(expectedMessage)).toBeInTheDocument();
+          expect(screen.getByText(expectedErrorMessage)).toBeInTheDocument();
         });
         expect(storageUtils.addFoodItem).not.toHaveBeenCalled();
       }
     );
 
-    it('エラーが発生した食品名入力フィールドにエラースタイルが適用されること', async () => {
+    // 食品名エラー時のUI表示に関するテスト
+    it('食品名エラー時に入力フィールドにエラースタイルが適用される', async () => {
       // Arrange
       const { user, getByRole } = renderFoodForm(mockProps);
       const nameInput = getByRole('textbox', { name: '食品名' });
@@ -437,34 +466,35 @@ describe('FoodForm', () => {
       });
     });
 
-    it('エラーが発生した賞味期限フィールドにエラースタイルが適用されること', async () => {
+    // 賞味期限エラー時のUI表示に関するテスト
+    it('賞味期限エラー時に日付ピッカーボタンにエラースタイルが適用される', async () => {
       // Arrange
       const { user, getByRole } = renderFoodForm(mockProps);
       const nameInput = getByRole('textbox', { name: '食品名' });
       const submitButton = getByRole('button', { name: '登録' });
+
       // 日付バリデーションエラーを模倣
-      const mockValidateExpiryDate = vi
+      mockValidateExpiryDate = vi
         .spyOn(validationUtils, 'validateExpiryDate')
-        .mockReturnValue('日付エラーのためテストでエラー');
+        .mockReturnValue('テスト用日付エラー');
 
       // Act: 名前は有効にし、日付エラーを発生させる
       await user.type(nameInput, '有効な名前');
       await user.click(submitButton);
 
-      // Assert: 日付ピッカーにエラースタイル適用
+      // Assert: 日付ピッカーにエラースタイル適用とエラーメッセージ表示
       await waitFor(() => {
         const datePickerButton = getByRole('button', {
           name: '2024年7月20日',
         });
         expect(datePickerButton).toHaveClass('border-destructive');
-        expect(
-          screen.getByText('日付エラーのためテストでエラー')
-        ).toBeInTheDocument();
+        expect(screen.getByText('テスト用日付エラー')).toBeInTheDocument();
+        expect(storageUtils.addFoodItem).not.toHaveBeenCalled();
       });
-      mockValidateExpiryDate.mockRestore();
     });
 
-    it('入力値を修正するとエラーメッセージが消えることを確認（食品名）', async () => {
+    // エラー修正時の動作確認テスト
+    it('入力値を修正するとエラーメッセージが消える（食品名）', async () => {
       // Arrange
       const { user, getByRole } = renderFoodForm(mockProps);
       const nameInput = getByRole('textbox', { name: '食品名' });
@@ -473,15 +503,17 @@ describe('FoodForm', () => {
       // Act: エラーを発生させる (名前を空にして送信)
       await user.clear(nameInput);
       await user.click(submitButton);
+
+      // エラーメッセージが表示されることを確認
       const errorMessage = await screen.findByText(
         '食品名を入力してください。空白文字のみは無効です。'
       );
       expect(errorMessage).toBeInTheDocument();
 
-      // Act: 正しい値を入力
+      // Act: 正しい値を入力してエラーを修正
       await user.type(nameInput, '有効な名前');
 
-      // Assert
+      // Assert: エラーメッセージが消える
       await waitFor(() => {
         expect(
           screen.queryByText(
@@ -490,89 +522,5 @@ describe('FoodForm', () => {
         ).not.toBeInTheDocument();
       });
     });
-  });
-
-  // フォームフィールドのエラースタイル適用
-  describe('フォームフィールドのエラースタイル適用', () => {
-    let mockValidateExpiryDate: unknown = null;
-
-    afterEach(() => {
-      // 各テストケース後にモックを確実にリストア
-      if (mockValidateExpiryDate) {
-        // 型アサーションを使用して安全に操作
-        (mockValidateExpiryDate as { mockRestore: () => void }).mockRestore();
-        mockValidateExpiryDate = null;
-      }
-    });
-
-    it.each([
-      {
-        caseName: '食品名が空の場合、食品名入力欄にエラースタイルが適用される',
-        fieldIdentifier: { role: 'textbox' as const, name: '食品名' },
-        actionToTriggerError: async (
-          user: ReturnType<
-            typeof import('@testing-library/user-event').default.setup
-          >
-        ) => {
-          const nameInput = screen.getByRole('textbox', { name: '食品名' });
-          const submitButton = screen.getByRole('button', { name: '登録' });
-          await user.clear(nameInput);
-          await user.click(submitButton);
-        },
-      },
-      {
-        caseName:
-          '賞味期限が無効な場合、日付ピッカーボタンにエラースタイルが適用される',
-        fieldIdentifier: { role: 'button' as const, name: '2024年7月20日' },
-        actionToTriggerError: async (
-          user: ReturnType<
-            typeof import('@testing-library/user-event').default.setup
-          >
-        ) => {
-          const nameInput = screen.getByRole('textbox', { name: '食品名' });
-          const submitButton = screen.getByRole('button', { name: '登録' });
-          mockValidateExpiryDate = vi
-            .spyOn(validationUtils, 'validateExpiryDate')
-            .mockReturnValue('テスト用日付エラー');
-          await user.type(nameInput, '有効な名前');
-          await user.click(submitButton);
-        },
-        expectedErrorMessage: 'テスト用日付エラー',
-        skipAriaInvalidCheck: true, // 日付ピッカーの場合はaria-invalid属性のチェックをスキップ
-      },
-    ])(
-      '$caseName',
-      async ({
-        fieldIdentifier,
-        actionToTriggerError,
-        expectedErrorMessage,
-        skipAriaInvalidCheck = false,
-      }) => {
-        // Arrange
-        const { user, getByRole } = renderFoodForm(mockProps);
-        vi.spyOn(storageUtils, 'addFoodItem'); // addFoodItemが呼ばれないことを確認するためスパイを設定
-
-        // Act
-        await actionToTriggerError(user);
-
-        // Assert
-        const fieldElement = getByRole(fieldIdentifier.role, {
-          name: fieldIdentifier.name,
-        });
-        await waitFor(() => {
-          expect(fieldElement).toHaveClass('border-destructive');
-          if (!skipAriaInvalidCheck) {
-            expect(fieldElement).toHaveAttribute('aria-invalid', 'true');
-          }
-          if (expectedErrorMessage) {
-            expect(screen.getByText(expectedErrorMessage)).toBeInTheDocument();
-          }
-        });
-        // 賞味期限エラーの場合のみ addFoodItem が呼ばれないことを確認
-        if (fieldIdentifier.name === '2024年7月20日') {
-          expect(storageUtils.addFoodItem).not.toHaveBeenCalled();
-        }
-      }
-    );
   });
 });
