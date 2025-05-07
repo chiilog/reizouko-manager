@@ -165,19 +165,12 @@ export function FoodForm({
 
     // 全フィールドの検証
     const nameError = validateFoodName(name);
-    // expiryDateがundefinedの場合は直接エラーメッセージを返し、
-    // 値が存在する場合のみvalidateExpiryDateでバリデーションを行う
-    // これは型安全性とユーザー体験の両方を考慮した対応
-    const dateError = expiryDate
-      ? validateExpiryDate(expiryDate)
-      : '日付を選択してください。'; // expiryDateがundefinedの場合のエラーメッセージ
+    // validateExpiryDateを使って日付のバリデーションを行う
+    const dateError = validateExpiryDate(expiryDate);
 
     const newErrors: FormErrors = {};
     if (nameError) newErrors.name = nameError;
-    if (!expiryDate || dateError !== null) {
-      // expiryDateが未選択、またはvalidateExpiryDateがエラーメッセージを返した場合
-      newErrors.expiryDate = dateError || '日付を選択してください。';
-    }
+    if (dateError) newErrors.expiryDate = dateError;
 
     // エラーがある場合は処理を中断
     if (Object.keys(newErrors).length > 0) {
@@ -204,9 +197,9 @@ export function FoodForm({
     const sanitizedName = sanitizeHtmlTags(name.trim());
 
     try {
-      // 食材の追加 (expiryDateがundefinedでないことは上でチェック済みのはずだが念のため)
+      // 食材の追加（expiryDateがundefinedでないことは上でチェック済み）
       if (!expiryDate) {
-        // このケースは通常発生しないはずだが、型安全のため
+        // 型安全のための冗長チェック
         throw new ValidationError('賞味期限が設定されていません。');
       }
       addFoodItem({
@@ -229,7 +222,8 @@ export function FoodForm({
         systemError =
           'ネットワーク接続に問題があります。接続を確認し、もう一度お試しください。';
       } else if (error instanceof ValidationError) {
-        systemError = error.message; // バリデーションエラーのメッセージをそのまま表示
+        // ValidationErrorのメッセージをそのまま表示
+        systemError = error.message;
       } else if (error instanceof StorageError) {
         systemError =
           'データの保存中にエラーが発生しました。ブラウザの設定を確認し、もう一度お試しください。';

@@ -56,6 +56,10 @@ describe('validateExpiryDate', () => {
     expect(validateExpiryDate(null)).toBe('賞味期限を選択してください。');
   });
 
+  it('undefinedの場合はエラーを返す', () => {
+    expect(validateExpiryDate(undefined)).toBe('賞味期限を選択してください。');
+  });
+
   it('過去の日付の場合はエラーを返す', () => {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
