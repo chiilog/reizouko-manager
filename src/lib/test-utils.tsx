@@ -7,27 +7,29 @@ import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest'; // vi をインポートしてモック関数を作成できるようにする
 import { FoodForm, type FoodFormProps } from '@/components/FoodForm'; // FoodForm と Props の型をインポート
 
+// date-fns のロケール
+import { format } from 'date-fns';
+import { enUS } from 'date-fns/locale';
+
 /**
  * @interface RenderFoodFormResult - renderFoodForm ヘルパーの戻り値の型定義。
  * @property {ReturnType<typeof userEvent.setup>} user - ユーザー操作のための userEvent インスタンス。
  * @property {RenderResult['rerender']} rerender - テスト用の再レンダリング関数。
  * @property {RenderResult['getByRole']} getByRole - getByRoleクエリ関数。
- * @property {RenderResult['getByLabelText']} getByLabelText - getByLabelTextクエリ関数。
  */
 interface RenderFoodFormResult {
   user: ReturnType<typeof userEvent.setup>;
   rerender: RenderResult['rerender'];
   getByRole: RenderResult['getByRole'];
-  getByLabelText: RenderResult['getByLabelText'];
 }
 
 /**
  * FoodForm コンポーネントをテスト用にレンダリングし、
- * userEvent インスタンスと rerender, getByRole, getByLabelText を返します。
+ * userEvent インスタンスと rerender, getByRole を返します。
  *
  * @param {Partial<FoodFormProps>} [props] - FoodForm に渡すプロパティ (部分的に指定可能)。
  *                                           指定されなかったプロパティはデフォルト値で補完されます。
- * @returns {RenderFoodFormResult} userEvent インスタンスと rerender, getByRole, getByLabelText を含むオブジェクト。
+ * @returns {RenderFoodFormResult} userEvent インスタンスと rerender, getByRole を含むオブジェクト。
  */
 export const renderFoodForm = (
   props?: Partial<FoodFormProps>
@@ -44,14 +46,20 @@ export const renderFoodForm = (
 
   const mergedProps = { ...defaultProps, ...props };
 
-  const { rerender, getByRole, getByLabelText } = render(<FoodForm {...mergedProps} />);
+  const { rerender, getByRole } = render(<FoodForm {...mergedProps} />);
   return {
     user,
     rerender,
     getByRole,
-    getByLabelText,
   };
 };
 
-// 他にも共通化できるテストユーティリティがあればここに追加していく
-// 例: selectCalendarDate, fillAndSubmitFoodForm など 
+/**
+ * Shadcn‑Calendar が採用している
+ *   aria-label="EEEE, MMMM do, yyyy"   形式を生成するヘルパー
+ *
+ * 将来フォーマットが変わった場合は ここ 1 か所を直すだけで
+ * すべてのテストが追随できる。
+ */
+export const calcShadcnAriaLabel = (date: Date, locale = enUS): string =>
+  format(date, 'EEEE, MMMM do, yyyy', { locale });
