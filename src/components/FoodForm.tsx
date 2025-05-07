@@ -32,6 +32,12 @@ import {
   validateFoodName,
   validateExpiryDate,
 } from '@/lib/validation';
+import {
+  QuotaExceededError,
+  NetworkError,
+  ValidationError,
+  StorageError,
+} from '@/lib/errors';
 
 interface FoodFormProps {
   /**
@@ -215,9 +221,23 @@ export function FoodForm({
     } catch (error) {
       // エラーが発生した場合、エラーメッセージを設定
       console.error('食材の追加に失敗しました', error);
-      // ユーザーにはシンプルなメッセージを表示
+      // ユーザーにはエラーの種類に応じたメッセージを表示
+      let systemError = '食材の追加に失敗しました。もう一度お試しください。';
+      if (error instanceof QuotaExceededError) {
+        systemError =
+          '保存容量が上限に達しました。不要なデータを削除してください。';
+      } else if (error instanceof NetworkError) {
+        systemError =
+          'ネットワーク接続に問題があります。接続を確認し、もう一度お試しください。';
+      } else if (error instanceof ValidationError) {
+        systemError =
+          '入力内容に問題があります。内容を確認し、もう一度お試しください。';
+      } else if (error instanceof StorageError) {
+        systemError =
+          'データの保存中にエラーが発生しました。ブラウザの設定を確認し、もう一度お試しください。';
+      }
       setErrors({
-        systemError: '食材の追加に失敗しました。もう一度お試しください。',
+        systemError: systemError,
       });
     } finally {
       // 処理完了時に送信中フラグをOFFに

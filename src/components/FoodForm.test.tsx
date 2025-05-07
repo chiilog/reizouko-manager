@@ -12,6 +12,8 @@ import {
 import userEvent from '@testing-library/user-event';
 import { FoodForm } from './FoodForm';
 import * as storageUtils from '@/lib/storage';
+import { QuotaExceededError } from '@/lib/errors';
+import React from 'react';
 
 // モックの定義
 vi.mock('@/lib/storage', () => ({
@@ -194,7 +196,7 @@ describe('FoodForm', () => {
   });
 
   /**
-   * 賞味期限入力のバリデーションに関する実際のユースケースに基づくテスト
+   * 賞味期限入力のバリデーション
    */
   describe('賞味期限入力のバリデーション', () => {
     it('カレンダーUIで過去の日付が選択できないことを確認', async () => {
@@ -449,6 +451,36 @@ describe('FoodForm', () => {
   });
 
   /**
+   * 特定のエラータイプに対するエラーメッセージをテスト
+   */
+  it('エラータイプに応じた具体的なエラーメッセージが表示されることを確認', async () => {
+    // Arrange
+    // QuotaExceededErrorをスローするようにモック
+    vi.mocked(storageUtils.addFoodItem).mockImplementation(() => {
+      throw new QuotaExceededError();
+    });
+
+    render(<FoodForm {...mockProps} />);
+    const nameInput = screen.getByRole('textbox', { name: '食品名' });
+    const submitButton = screen.getByRole('button', { name: '登録' });
+
+    // Act
+    // 食品名を入力して送信
+    await user.type(nameInput, 'テスト食材');
+    await user.click(submitButton);
+
+    // Assert
+    // 特定のエラータイプに応じたメッセージが表示されることを確認
+    const errorElement = await screen.findByText(
+      '保存容量が上限に達しました。不要なデータを削除してください。'
+    );
+    expect(errorElement).toBeInTheDocument();
+    expect(errorElement.textContent).toBe(
+      '保存容量が上限に達しました。不要なデータを削除してください。'
+    );
+  });
+
+  /**
    * 食品名のバリデーション強化に関するテスト
    */
   describe('食品名入力のバリデーション', () => {
@@ -645,9 +677,6 @@ describe('FoodForm', () => {
 
     it('複数フィールドのバリデーションが行われることの確認', async () => {
       // Arrange
-      // FoodFormコンポーネントのhandleSubmitが内部で行っているバリデーションをモックせずに使う
-      // 現在のコードでは validateExpiryDate は使用されていない可能性があるため、テストを調整
-
       render(<FoodForm {...mockProps} />);
       const nameInput = screen.getByRole('textbox', { name: '食品名' });
       const submitButton = screen.getByRole('button', { name: '登録' });
@@ -690,6 +719,36 @@ describe('FoodForm', () => {
 
       // ダイアログを閉じる処理が実行されたことを確認
       expect(mockProps.onClose).toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * 複数フィールドのバリデーションが行われることの確認
+   */
+  describe('フォームバリデーション', () => {
+    it('食品名が空の場合はエラーが表示されることを確認', async () => {
+      // Arrange
+      render(<FoodForm {...mockProps} />);
+      const nameInput = screen.getByRole('textbox', { name: '食品名' });
+      const submitButton = screen.getByRole('button', { name: '登録' });
+
+      // Act
+      // 名前欄を空にして送信
+      await user.clear(nameInput);
+      await user.click(submitButton);
+
+      // Assert
+      // 名前のエラーメッセージが表示されていることを確認
+      const nameError = await screen.findByText(
+        '食品名を入力してください。空白文字のみは無効です。'
+      );
+      expect(nameError).toBeInTheDocument();
+      expect(nameError.textContent).toBe(
+        '食品名を入力してください。空白文字のみは無効です。'
+      );
+
+      // 送信が中断されていることを確認 (addFoodItemが呼ばれていないこと)
+      expect(storageUtils.addFoodItem).not.toHaveBeenCalled();
     });
   });
 });
