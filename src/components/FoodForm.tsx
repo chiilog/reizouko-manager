@@ -165,6 +165,9 @@ export function FoodForm({
 
     // 全フィールドの検証
     const nameError = validateFoodName(name);
+    // expiryDateがundefinedの場合は直接エラーメッセージを返し、
+    // 値が存在する場合のみvalidateExpiryDateでバリデーションを行う
+    // これは型安全性とユーザー体験の両方を考慮した対応
     const dateError = expiryDate
       ? validateExpiryDate(expiryDate)
       : '日付を選択してください。'; // expiryDateがundefinedの場合のエラーメッセージ

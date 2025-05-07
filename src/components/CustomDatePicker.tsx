@@ -2,7 +2,7 @@
  * カスタム日付選択コンポーネント
  * @description PopoverとCalendarを組み合わせた再利用可能な日付選択UIを提供します。
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -22,16 +22,145 @@ import {
   SelectItem,
 } from '@/components/ui/select';
 
-// CustomDropdownNav コンポーネントの定義 (元の実装に戻す)
+/**
+ * カスタムドロップダウンナビゲーションコンポーネント
+ * カレンダーの上部に表示される年月選択用のドロップダウンUIを提供します
+ */
 const CustomDropdownNav = (
   navProps: React.HTMLAttributes<HTMLDivElement>
 ): React.JSX.Element => {
-  const { goToMonth, months } = useDayPicker();
+  // React Hookはコンポーネントのトップレベルで呼び出す必要がある
+  const dayPicker = useDayPicker();
 
-  const displayDate =
-    months && months.length > 0 && months[0]?.date ? months[0].date : undefined;
+  try {
+    const { goToMonth, months } = dayPicker;
 
-  if (!displayDate) {
+    const displayDate =
+      months && months.length > 0 && months[0]?.date
+        ? months[0].date
+        : undefined;
+
+    // 表示日付がない場合（エッジケース対応）
+    if (!displayDate) {
+      console.warn(
+        'カレンダーの表示日付が未定義です。デフォルトUIを表示します。'
+      );
+      return (
+        <div
+          {...navProps}
+          className={cn(
+            'rdp-dropdown_nav flex items-center justify-center gap-1 p-2',
+            navProps.className
+          )}
+        />
+      );
+    }
+
+    const currentYear = displayDate.getFullYear();
+    const selectedMonth = displayDate.getMonth();
+
+    // 有効な年の範囲を設定（過去10年から将来10年）
+    const yearOptions = Array.from(
+      { length: 21 },
+      (_, i) => currentYear - 10 + i
+    );
+    const monthOptions = Array.from({ length: 12 }, (_, i) => i);
+
+    /**
+     * 年の変更を処理するハンドラー
+     * @param yearValue 選択された年（文字列）
+     */
+    const handleYearChange = (yearValue: string) => {
+      try {
+        // 文字列を数値に変換し、有効な値かチェック
+        const yearNum = parseInt(yearValue, 10);
+        if (isNaN(yearNum)) {
+          console.error('無効な年の値です:', yearValue);
+          return;
+        }
+
+        const newDate = new Date(displayDate);
+        newDate.setFullYear(yearNum);
+        goToMonth(newDate);
+      } catch (error) {
+        console.error('年の変更中にエラーが発生しました:', error);
+        // エラーが発生しても、UIは壊さない
+      }
+    };
+
+    /**
+     * 月の変更を処理するハンドラー
+     * @param monthValue 選択された月（文字列）
+     */
+    const handleMonthChange = (monthValue: string) => {
+      try {
+        // 文字列を数値に変換し、有効な値かチェック
+        const monthNum = parseInt(monthValue, 10);
+        if (isNaN(monthNum) || monthNum < 0 || monthNum > 11) {
+          console.error('無効な月の値です:', monthValue);
+          return;
+        }
+
+        const newDate = new Date(displayDate);
+        newDate.setMonth(monthNum);
+        goToMonth(newDate);
+      } catch (error) {
+        console.error('月の変更中にエラーが発生しました:', error);
+        // エラーが発生しても、UIは壊さない
+      }
+    };
+
+    return (
+      <div
+        {...navProps}
+        className={cn(
+          'rdp-dropdown_nav flex items-center justify-center gap-1 p-2',
+          navProps.className
+        )}
+      >
+        <Select onValueChange={handleYearChange} value={currentYear.toString()}>
+          <SelectTrigger
+            data-testid="year-select"
+            aria-label="年を選択"
+            className="h-8 w-[75px] px-2 text-sm focus:ring-0"
+          >
+            <SelectValue placeholder="年" />
+          </SelectTrigger>
+          <SelectContent className="max-h-[200px]">
+            {yearOptions.map((year) => (
+              <SelectItem key={year} value={year.toString()}>
+                {year}年
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          onValueChange={handleMonthChange}
+          value={selectedMonth.toString()}
+        >
+          <SelectTrigger
+            data-testid="month-select"
+            aria-label="月を選択"
+            className="h-8 w-[65px] px-2 text-sm focus:ring-0"
+          >
+            <SelectValue placeholder="月" />
+          </SelectTrigger>
+          <SelectContent className="max-h-[200px]">
+            {monthOptions.map((monthIndex) => (
+              <SelectItem key={monthIndex} value={monthIndex.toString()}>
+                {monthIndex + 1}月
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    );
+  } catch (error) {
+    // トップレベルのエラーハンドリング - UIが壊れることを防ぐ
+    console.error(
+      'ドロップダウンナビゲーションの描画中にエラーが発生しました:',
+      error
+    );
     return (
       <div
         {...navProps}
@@ -42,73 +171,6 @@ const CustomDropdownNav = (
       />
     );
   }
-
-  const currentYear = displayDate.getFullYear();
-  const selectedMonth = displayDate.getMonth();
-
-  const yearOptions = Array.from(
-    { length: 21 },
-    (_, i) => currentYear - 10 + i
-  );
-  const monthOptions = Array.from({ length: 12 }, (_, i) => i);
-
-  const handleYearChange = (yearValue: string) => {
-    const newDate = new Date(displayDate);
-    newDate.setFullYear(parseInt(yearValue, 10));
-    goToMonth(newDate);
-  };
-
-  const handleMonthChange = (monthValue: string) => {
-    const newDate = new Date(displayDate);
-    newDate.setMonth(parseInt(monthValue, 10));
-    goToMonth(newDate);
-  };
-
-  return (
-    <div
-      {...navProps}
-      className={cn(
-        'rdp-dropdown_nav flex items-center justify-center gap-1 p-2',
-        navProps.className
-      )}
-    >
-      <Select onValueChange={handleYearChange} value={currentYear.toString()}>
-        <SelectTrigger
-          data-testid="year-select"
-          aria-label="年を選択"
-          className="h-8 w-[75px] px-2 text-sm focus:ring-0"
-        >
-          <SelectValue placeholder="年" />
-        </SelectTrigger>
-        <SelectContent className="max-h-[200px]">
-          {yearOptions.map((year) => (
-            <SelectItem key={year} value={year.toString()}>
-              {year}年
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select
-        onValueChange={handleMonthChange}
-        value={selectedMonth.toString()}
-      >
-        <SelectTrigger
-          data-testid="month-select"
-          aria-label="月を選択"
-          className="h-8 w-[65px] px-2 text-sm focus:ring-0"
-        >
-          <SelectValue placeholder="月" />
-        </SelectTrigger>
-        <SelectContent className="max-h-[200px]">
-          {monthOptions.map((monthIndex) => (
-            <SelectItem key={monthIndex} value={monthIndex.toString()}>
-              {monthIndex + 1}月
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
 };
 
 interface CustomDatePickerProps {
@@ -187,13 +249,71 @@ export function CustomDatePicker({
   // 過去の日付を選択不可にするための修飾子
   const disabledDays = [{ before: effectiveMinDate }];
 
+  // 選択日付が最小日付より前の場合に修正する（最小日付が変更された場合に対応）
+  useEffect(() => {
+    if (selectedDate && minDate && selectedDate < minDate) {
+      console.warn('選択日付が最小日付より前のため、最小日付に修正します。');
+      onDateChange(new Date(minDate)); // 最小日付のコピーを使用
+    }
+  }, [minDate, selectedDate, onDateChange]);
+
+  /**
+   * 入力された日付が有効かどうかを検証する
+   * @param {Date | undefined} date - 検証する日付
+   * @returns {boolean} 日付が有効ならtrue、そうでなければfalse
+   */
+  const isValidDate = (date: Date | undefined): boolean => {
+    if (!date) return false;
+
+    // 日付オブジェクトが有効かどうか
+    if (isNaN(date.getTime())) return false;
+
+    // 最小日付以降かどうか
+    if (minDate && date < minDate) return false;
+
+    return true;
+  };
+
   /**
    * 日付がカレンダーから選択されたときのハンドラ
    * @param {Date | undefined} date - 選択された日付、または未選択を示すundefined
    */
   const handleDateSelect = (date: Date | undefined) => {
-    onDateChange(date);
-    setIsOpen(false); // 日付を選択したらPopoverを閉じる
+    try {
+      // 日付の妥当性検証
+      if (date && !isValidDate(date)) {
+        console.warn(
+          '無効な日付が選択されました。日付の選択をスキップします。'
+        );
+        setIsOpen(false);
+        return;
+      }
+
+      onDateChange(date);
+      setIsOpen(false); // 日付を選択したらPopoverを閉じる
+    } catch (error) {
+      console.error('日付選択処理中にエラーが発生しました:', error);
+      // エラーが発生しても、UIは壊さない
+      setIsOpen(false);
+    }
+  };
+
+  // 初期表示月を設定する際のフォールバック処理
+  const getDefaultMonth = (): Date => {
+    try {
+      if (selectedDate && isValidDate(selectedDate)) {
+        return selectedDate;
+      } else if (initialDate && isValidDate(initialDate)) {
+        return initialDate;
+      } else {
+        // その他の場合は今日の日付を使用
+        return getDateAfterDays(0);
+      }
+    } catch (error) {
+      console.error('初期月の計算中にエラーが発生しました:', error);
+      // エラーが発生した場合は今日の日付を返す
+      return new Date();
+    }
   };
 
   return (
@@ -210,6 +330,7 @@ export function CustomDatePicker({
           aria-label={
             selectedDate ? formatDateToJapanese(selectedDate) : placeholder
           }
+          aria-invalid={isError}
         >
           <CalendarIcon className="mr-2 h-4 w-4" />
           {selectedDate ? (
@@ -225,7 +346,7 @@ export function CustomDatePicker({
           selected={selectedDate}
           onSelect={handleDateSelect}
           disabled={disabledDays} // 過去の日付を選択不可にする
-          defaultMonth={selectedDate || initialDate || getDateAfterDays(0)} // カレンダーの初期表示月
+          defaultMonth={getDefaultMonth()} // 安全な初期表示月の計算
           captionLayout="dropdown-months" // ドロップダウンナビゲーションを有効化（月のドロップダウン）
           components={{
             DropdownNav: CustomDropdownNav, // カスタムドロップダウンナビゲーションを指定
