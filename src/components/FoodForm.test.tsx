@@ -13,7 +13,6 @@ import userEvent from '@testing-library/user-event';
 import { FoodForm } from './FoodForm';
 import * as storageUtils from '@/lib/storage';
 import { QuotaExceededError } from '@/lib/errors';
-import React from 'react';
 
 // モックの定義
 vi.mock('@/lib/storage', () => ({
